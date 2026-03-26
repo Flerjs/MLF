@@ -1,0 +1,39 @@
+{
+	"nodes":[
+		{"id":"3df2d7a66914ead1","x":-260,"y":-120,"width":250,"height":60,"type":"text","text":"Главное меню"},
+		{"id":"4a1f96a96f125751","x":-640,"y":-120,"width":250,"height":60,"type":"text","text":"Визуал"},
+		{"id":"7df2e18a686c1bdd","x":120,"y":-240,"width":250,"height":60,"type":"text","text":"Настройки"},
+		{"id":"f59c44bf1e6801c3","x":120,"y":-120,"width":250,"height":60,"type":"text","text":"Галерея"},
+		{"id":"470f938a4993cd06","x":120,"y":0,"width":250,"height":60,"type":"text","text":"Загрузка игры"},
+		{"id":"a766c388d333835e","x":120,"y":-360,"width":250,"height":60,"type":"text","text":"Новая игра"},
+		{"id":"702a62c3383753f6","x":120,"y":120,"width":250,"height":60,"type":"text","text":"Загрузить с определенного момента"},
+		{"id":"46547bb08e4ba56d","x":500,"y":0,"width":250,"height":60,"type":"text","text":"Выбор сохранения"},
+		{"id":"e2d2af04e8367d9c","x":500,"y":-240,"width":250,"height":60,"type":"text","text":"Настройки текста"},
+		{"id":"a7c93010a3762c4c","x":500,"y":-330,"width":250,"height":60,"type":"text","text":"Язык игры"},
+		{"id":"6f54bec5d35d8911","x":500,"y":-150,"width":250,"height":60,"type":"text","text":"Разрешение и полноэкранный режим"},
+		{"id":"1713316cda3badca","x":500,"y":120,"width":250,"height":60,"type":"text","text":"Загрузка с определенного эпизода"},
+		{"id":"67fafe8725c9a2ce","x":1020,"y":-340,"width":250,"height":60,"type":"text","text":"Персонажи\n"},
+		{"id":"27b2d4ade9ebf534","x":1020,"y":-160,"width":250,"height":60,"type":"text","text":"Локации"},
+		{"id":"6c16326371730a97","x":1020,"y":20,"width":250,"height":60,"type":"text","text":"Игровые моменты"},
+		{"id":"7c9645e9626a2534","x":1423,"y":120,"width":250,"height":60,"type":"text","text":"Диалоги"},
+		{"id":"edf6496efda7c760","x":1423,"y":-80,"width":250,"height":60,"type":"text","text":"Концовки"}
+	],
+	"edges":[
+		{"id":"ebb128a9a4336909","fromNode":"4a1f96a96f125751","fromSide":"right","toNode":"3df2d7a66914ead1","toSide":"left"},
+		{"id":"0752ab49ec60bf39","fromNode":"3df2d7a66914ead1","fromSide":"right","toNode":"7df2e18a686c1bdd","toSide":"left"},
+		{"id":"451842aaa215196f","fromNode":"3df2d7a66914ead1","fromSide":"right","toNode":"f59c44bf1e6801c3","toSide":"left"},
+		{"id":"04d0f6d8bd1a5383","fromNode":"3df2d7a66914ead1","fromSide":"right","toNode":"470f938a4993cd06","toSide":"left"},
+		{"id":"888c025556aea94f","fromNode":"3df2d7a66914ead1","fromSide":"right","toNode":"a766c388d333835e","toSide":"left"},
+		{"id":"2511f80f4e161545","fromNode":"3df2d7a66914ead1","fromSide":"right","toNode":"702a62c3383753f6","toSide":"left"},
+		{"id":"9b2fc990bc544dce","fromNode":"f59c44bf1e6801c3","fromSide":"right","toNode":"67fafe8725c9a2ce","toSide":"left"},
+		{"id":"c787b8ceef3ddd0a","fromNode":"f59c44bf1e6801c3","fromSide":"right","toNode":"27b2d4ade9ebf534","toSide":"left"},
+		{"id":"91e1d68e55074552","fromNode":"f59c44bf1e6801c3","fromSide":"right","toNode":"6c16326371730a97","toSide":"left"},
+		{"id":"83e7f6789aa60360","fromNode":"470f938a4993cd06","fromSide":"right","toNode":"46547bb08e4ba56d","toSide":"left"},
+		{"id":"672e58608735d5e8","fromNode":"7df2e18a686c1bdd","fromSide":"right","toNode":"a7c93010a3762c4c","toSide":"left"},
+		{"id":"9a774f1a735ce053","fromNode":"7df2e18a686c1bdd","fromSide":"right","toNode":"e2d2af04e8367d9c","toSide":"left"},
+		{"id":"5f49fc0de94327be","fromNode":"7df2e18a686c1bdd","fromSide":"right","toNode":"6f54bec5d35d8911","toSide":"left"},
+		{"id":"45520bca3cb3b68a","fromNode":"702a62c3383753f6","fromSide":"right","toNode":"1713316cda3badca","toSide":"left"},
+		{"id":"108f09bf0042c98c","fromNode":"6c16326371730a97","fromSide":"right","toNode":"edf6496efda7c760","toSide":"left"},
+		{"id":"ec3e898b29f88907","fromNode":"6c16326371730a97","fromSide":"right","toNode":"7c9645e9626a2534","toSide":"left"}
+	]
+}

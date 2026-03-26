@@ -163,14 +163,21 @@ class VisualNovelApp {
         explicit VisualNovelApp(HWND hwnd)
             : hwnd_(hwnd), text_index_(0), speed_ms_(8), has_key_(false), sound_index_(0), waiting_for_click_(false) {
             srand(static_cast<unsigned>(time(nullptr)));
+            chars_per_tick_ = 3;  // Увеличьте с 1 до 3-5 символов за тик
             load_images();
             create_controls();
             start_game();
-        }
+    }
     
         ~VisualNovelApp() {
             for (auto* img : images_) delete img;
             if (scaled_bg_cache_) delete scaled_bg_cache_;
+            
+            // Очищаем спрайт
+            if (character_sprite_) {
+                delete character_sprite_;
+                character_sprite_ = nullptr;
+            }
             if (scaled_character_cache_) delete scaled_character_cache_;  // Добавить эту строку
             if (character_sprite_) delete character_sprite_;  // Добавить эту строку
             
@@ -228,6 +235,26 @@ class VisualNovelApp {
             }
         }
         
+        void SkipAnimation() {
+            if (text_index_ < current_text_.size()) {
+                // Пропускаем всю анимацию, показываем весь текст сразу
+                text_index_ = current_text_.size();
+                shown_text_ = current_text_;
+                // Убираем \r\n в конце для отображения
+                std::wstring display_text = current_text_;
+                if (display_text.size() >= 2 && display_text.substr(display_text.size() - 2) == L"\r\n") {
+                    display_text = display_text.substr(0, display_text.size() - 2);
+                }
+                set_text_box(display_text);
+                KillTimer(hwnd_, 1);
+                if (after_animation_) {
+                    auto cb = after_animation_;
+                    after_animation_ = nullptr;
+                    cb();
+                }
+            }
+        }
+
         void WaitForClick(std::function<void()> after) {
             waiting_for_click_ = true;
             on_click_action_ = after;
@@ -235,11 +262,6 @@ class VisualNovelApp {
         }
     
         void on_paint(HDC hdc) {
-            // Если спрайт должен сохраняться, но его нет, перезагружаем
-            if (keep_sprite_ && !character_sprite_ && !current_sprite_path_.empty()) {
-                set_character_sprite(current_sprite_path_, true);
-            }
-
             RECT rc;
             GetClientRect(hwnd_, &rc);
             int w = rc.right - rc.left;
@@ -262,16 +284,15 @@ class VisualNovelApp {
                 SolidBrush b(Color(255, 44, 62, 80));
                 g.FillRectangle(&b, 0, 0, rc.right, rc.bottom);
             }
-
-            
         
-            // ========== ОТРИСОВКА СПРАЙТА ПЕРСОНАЖА ==========
+            // ========== ОПТИМИЗИРОВАННАЯ ОТРИСОВКА СПРАЙТА ==========
             if (character_sprite_) {
-                int sprite_width = 300;
-                int sprite_height = 400;
-                int sprite_x = w - sprite_width - 50;
-                int sprite_y = h - sprite_height - 100;
+                int sprite_width = 250;
+                int sprite_height = 350;
+                int sprite_x = w - sprite_width - 30;
+                int sprite_y = h - sprite_height - 120;
                 
+                // Используем кэшированную версию спрайта
                 if (!scaled_character_cache_ || 
                     scaled_character_cache_->GetWidth() != sprite_width || 
                     scaled_character_cache_->GetHeight() != sprite_height) {
@@ -283,7 +304,8 @@ class VisualNovelApp {
                 }
                 g.DrawImage(scaled_character_cache_, sprite_x, sprite_y, sprite_width, sprite_height);
             }
-    
+        
+            // Панель диалога
             const int panel_x = 24;
             const int panel_y = rc.bottom - 285;
             const int panel_w = w - 48;
@@ -479,6 +501,7 @@ class VisualNovelApp {
         int scaled_bg_w_{0};
         int scaled_bg_h_{0};
 
+        bool sound_enabled_ = true;
 
         std::wstring current_text_;
         std::wstring shown_text_;
@@ -537,7 +560,7 @@ class VisualNovelApp {
             }
             
             // Загружаем спрайт персонажа
-            character_sprite_ = load_one(L"characters\\louis.png");  // Укажите путь к вашему спрайту
+            character_sprite_ = load_one(L"characters\\luis.png");  // Укажите путь к вашему спрайту
             if (!character_sprite_) {
                 // Если спрайт не загрузился, используем заглушку или nullptr
                 character_sprite_ = nullptr;
@@ -613,10 +636,11 @@ class VisualNovelApp {
         }
     
         void play_type_sound(wchar_t ch) {
+            if (!sound_enabled_) return;
             if (ch == L' ' || ch == L'\r' || ch == L'\n' || ch == L'\t') return;
             sound_counter_++;
-            if ((sound_counter_ % 2) != 0) return;
-    
+            if ((sound_counter_ % 4) != 0) return;
+        
             int semitone_shift = (rand() % 13) - 6;
             
             if (active_sounds_.size() >= MAX_CONCURRENT_SOUNDS) {
@@ -624,7 +648,7 @@ class VisualNovelApp {
                 mciSendStringW(close_cmd.c_str(), nullptr, 0, nullptr);
                 active_sounds_.erase(active_sounds_.begin());
             }
-    
+        
             std::wstring alias = L"textsnd_" + std::to_wstring(sound_index_++);
             
             std::wstring open_cmd = L"open \"" + std::wstring(kTextSoundFile) + L"\" type mpegvideo alias " + alias;
@@ -636,10 +660,17 @@ class VisualNovelApp {
                 std::wstring play_cmd = L"play " + alias;
                 mciSendStringW(play_cmd.c_str(), nullptr, 0, nullptr);
                 
-                active_sounds_.push_back({alias, semitone_shift});
+                ActiveSound newSound;
+                newSound.alias = alias;
+                newSound.semitone_shift = semitone_shift;
+                active_sounds_.push_back(newSound);
             } else {
                 PlaySoundW(L"SystemAsterisk", nullptr, SND_ALIAS | SND_ASYNC | SND_NOSTOP | SND_NODEFAULT);
             }
+        }
+
+        void set_sound_enabled(bool enabled) {
+            sound_enabled_ = enabled;
         }
     
         RECT dialogue_dirty_rect() const {
@@ -661,26 +692,45 @@ class VisualNovelApp {
     
         void set_text_box(const std::wstring& text) {
             shown_text_ = text;
+            // Обновляем только область диалога, а не все окно
             RECT dirty = dialogue_dirty_rect();
             InvalidateRect(hwnd_, &dirty, FALSE);
         }
     
+        bool fileExists(const std::wstring& path) {
+            DWORD attrib = GetFileAttributesW(path.c_str());
+            return (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY));
+        }
+        
         void set_character_sprite(const std::wstring& sprite_filename, bool keep = false) {
             keep_sprite_ = keep;
             current_sprite_path_ = sprite_filename;
             
             std::wstring sprite_path = L"characters\\" + sprite_filename;
             
+            // Проверяем существование файла
+            if (!fileExists(sprite_path)) {
+                // Файл не найден, скрываем спрайт
+                if (character_sprite_) {
+                    delete character_sprite_;
+                    character_sprite_ = nullptr;
+                }
+                return;
+            }
+            
+            // Удаляем старый спрайт
             if (character_sprite_) {
                 delete character_sprite_;
                 character_sprite_ = nullptr;
             }
-            if (scaled_character_cache_) {
-                delete scaled_character_cache_;
-                scaled_character_cache_ = nullptr;
+            
+            // Загружаем новый спрайт
+            character_sprite_ = new Image(sprite_path.c_str());
+            if (character_sprite_->GetLastStatus() != Ok) {
+                delete character_sprite_;
+                character_sprite_ = nullptr;
             }
             
-            character_sprite_ = load_one(sprite_path.c_str());
             InvalidateRect(hwnd_, nullptr, FALSE);
         }
 
@@ -727,12 +777,16 @@ class VisualNovelApp {
             if (text_index_ < current_text_.size()) {
                 int remaining = static_cast<int>(current_text_.size() - text_index_);
                 int chunk = std::min(chars_per_tick_, remaining);
+                
+                // Блокируем перерисовку на время добавления символов
                 for (int i = 0; i < chunk; ++i) {
                     wchar_t ch = current_text_[text_index_ + static_cast<size_t>(i)];
                     shown_text_.push_back(ch);
                     play_type_sound(ch);
                 }
                 text_index_ += static_cast<size_t>(chunk);
+                
+                // Один раз обновляем отображение
                 set_text_box(shown_text_);
                 return;
             }
@@ -740,12 +794,6 @@ class VisualNovelApp {
             if (after_animation_) {
                 auto cb = after_animation_;
                 after_animation_ = nullptr;
-                
-                // Сохраняем спрайт перед выполнением следующего действия
-                if (keep_sprite_ && character_sprite_) {
-                    // Спрайт сохранится
-                }
-                
                 cb();
             }
         }
@@ -814,9 +862,10 @@ class VisualNovelApp {
         //Гл. 1, эп. 1
         void one() {
             set_background(bg_room_);
+            hide_character_sprite(),
             animate_text(
                 L"...\r\n",
-                [this]() { twosix(); },
+                [this]() { two(); },
                 L"",
                 false
             );
@@ -1061,7 +1110,15 @@ class VisualNovelApp {
         };
         void twosix() {
             set_background(bg_bathroom_);
+            
+            // Проверяем загрузку спрайта
             set_character_sprite_by_name(L"Луис", true);
+            
+            // Если спрайт не загрузился, показываем сообщение
+            if (!character_sprite_) {
+                MessageBoxW(hwnd_, L"Спрайт не загружен!\nПроверьте папку characters", L"Ошибка", MB_OK);
+            }
+            
             animate_text(
                 L"Луис Мэрион.",
                 [this]() { 
@@ -1070,7 +1127,7 @@ class VisualNovelApp {
                 L"",
                 false
             );
-        };
+        }
 
 
 
@@ -1240,6 +1297,8 @@ class MainMenu {
         HFONT title_font_;
         HFONT button_font_;
     
+        
+
         static constexpr int IDC_START_GAME = 2001;
         static constexpr int IDC_SETTINGS = 2002;
         static constexpr int IDC_EXIT_GAME = 2003;
@@ -1352,7 +1411,6 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             pt.x = LOWORD(lParam);
             pt.y = HIWORD(lParam);
             
-            // Проверяем, попали ли в область текста
             RECT textRect = app->GetTextAreaRect();
             if (PtInRect(&textRect, pt)) {
                 app->OnTextAreaClick();
@@ -1386,7 +1444,6 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     case WM_DRAWITEM: {
         LPDRAWITEMSTRUCT lpDIS = (LPDRAWITEMSTRUCT)lParam;
         
-        // Обрабатываем только наши кнопки выбора
         if (lpDIS->CtlType == ODT_BUTTON && 
             lpDIS->CtlID >= IDC_CHOICE1 && 
             lpDIS->CtlID <= IDC_CHOICE4) {
@@ -1394,28 +1451,22 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             HDC hdc = lpDIS->hDC;
             RECT rc = lpDIS->rcItem;
             
-            // Создаем кисть для фона (как у области с именем)
             HBRUSH bgBrush = CreateSolidBrush(RGB(110, 78, 100));
             FillRect(hdc, &rc, bgBrush);
             DeleteObject(bgBrush);
             
-            // Создаем перо для рамки (золотистый цвет)
             HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(230, 220, 235));
             HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
             HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
             
-            // Рисуем прямоугольную рамку
             Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
             
-            // Получаем текст кнопки
             wchar_t text[256];
             GetWindowTextW(lpDIS->hwndItem, text, 256);
             
-            // Настройки для текста
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(245, 238, 248));
             
-            // Создаем шрифт для кнопок
             HFONT buttonFont = CreateFontW(
                 -18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -1423,22 +1474,18 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             );
             HFONT oldFont = (HFONT)SelectObject(hdc, buttonFont);
             
-            // Отступ для текста
             RECT textRect = rc;
             textRect.left += 20;
             textRect.right -= 10;
             
-            // Рисуем текст
             DrawTextW(hdc, text, -1, &textRect, DT_VCENTER | DT_SINGLELINE);
             
-            // Эффект нажатия (если кнопка нажата)
             if (lpDIS->itemState & ODS_SELECTED) {
                 HBRUSH pressedBrush = CreateSolidBrush(RGB(80, 58, 70));
                 FrameRect(hdc, &rc, pressedBrush);
                 DeleteObject(pressedBrush);
             }
             
-            // Эффект фокуса (если кнопка в фокусе)
             if (lpDIS->itemState & ODS_FOCUS) {
                 RECT focusRect = rc;
                 focusRect.left += 2;
@@ -1448,12 +1495,10 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 DrawFocusRect(hdc, &focusRect);
             }
             
-            // Восстанавливаем старые объекты GDI
             SelectObject(hdc, oldFont);
             SelectObject(hdc, oldPen);
             SelectObject(hdc, oldBrush);
             
-            // Удаляем созданные объекты
             DeleteObject(buttonFont);
             DeleteObject(borderPen);
             

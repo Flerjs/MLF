@@ -38,6 +38,17 @@ HWND g_gameWindow = nullptr;
 bool g_isFullscreen = true;
 HWND g_loadingHwnd = nullptr;
 
+// Структура для хранения настроек
+struct GameSettings {
+    int screen_width = 1920;
+    int screen_height = 1080;
+    int volume = 100;
+    bool sound_enabled = true;
+};
+
+// Глобальные настройки
+GameSettings g_settings;
+
 enum ControlIds {
     IDC_CHOICE1 = 1101,
     IDC_CHOICE2 = 1102,
@@ -521,6 +532,10 @@ explicit VisualNovelApp(HWND hwnd)
         }
     }
 
+    void set_sound_enabled(bool enabled) {
+        sound_enabled_ = enabled;
+    }
+
     void reset_game() {
         previous_choice_.clear();
         has_key_ = false;
@@ -547,6 +562,11 @@ explicit VisualNovelApp(HWND hwnd)
         start_game();
     }
     
+    void set_volume(int volume) {
+        std::wstring cmd = L"setaudio textsnd volume to " + std::to_wstring(volume);
+        mciSendStringW(cmd.c_str(), nullptr, 0, nullptr);
+    }
+
     bool IsWaitingForClick() const { return waiting_for_click_; }
     RECT GetTextAreaRect() const {
         return text_area_.rect;
@@ -618,15 +638,10 @@ explicit VisualNovelApp(HWND hwnd)
     
         if (id >= IDC_CHOICE1 && id <= IDC_CHOICE4) {
             int idx = id - IDC_CHOICE1;
-            
             if (idx >= 0 && idx < static_cast<int>(current_choices_.size())) {
                 disable_choices();
                 auto cb = current_choices_[idx].action;
-                if (cb) {
-                    cb();
-                }
-                // ВАЖНО: возвращаемся, чтобы не выполнять другой код
-                return;
+                if (cb) cb();
             }
         }
     }
@@ -1183,156 +1198,282 @@ void disable_choices() {
 
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 class MainMenu {
-public:
-    MainMenu(HWND hwnd) : hwnd_(hwnd), g_gameWindow(nullptr) { create_controls(); }
-    ~MainMenu() { if (title_font_) DeleteObject(title_font_); if (button_font_) DeleteObject(button_font_); }
-    
-    void on_paint(HDC hdc) {
-        RECT rc;
-        GetClientRect(hwnd_, &rc);
-        
-        HDC memdc = CreateCompatibleDC(hdc);
-        HBITMAP back = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
-        HGDIOBJ old = SelectObject(memdc, back);
-        
-        // Градиентный фон
-        for (int y = 0; y < rc.bottom; y++) {
-            COLORREF color = RGB(
-                20 + (y * 15 / rc.bottom),
-                15 + (y * 10 / rc.bottom),
-                35 + (y * 20 / rc.bottom)
-            );
-            HPEN pen = CreatePen(PS_SOLID, 1, color);
-            HBRUSH brush = CreateSolidBrush(color);
-            SelectObject(memdc, pen);
-            SelectObject(memdc, brush);
-            Rectangle(memdc, 0, y, rc.right, y + 1);
-            DeleteObject(pen);
-            DeleteObject(brush);
+    public:
+        MainMenu(HWND hwnd) : hwnd_(hwnd), g_gameWindow(nullptr), show_settings_(false) {
+            create_controls();
         }
-        
-        // Декоративные круги
-        HPEN goldPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
-        HBRUSH oldBrush = (HBRUSH)SelectObject(memdc, GetStockObject(NULL_BRUSH));
-        
-        for (int i = 0; i < 3; i++) {
-            SelectObject(memdc, goldPen);
-            Ellipse(memdc, 50 + i * 150, 50, 150 + i * 150, 150);
-            Ellipse(memdc, rc.right - 150 - i * 150, rc.bottom - 150, rc.right - 50 - i * 150, rc.bottom - 50);
-        }
-        
-        SelectObject(memdc, oldBrush);
-        DeleteObject(goldPen);
-        
-        // Заголовок
-        SetBkMode(memdc, TRANSPARENT);
-        HFONT oldFont = (HFONT)SelectObject(memdc, title_font_);
-        
-        RECT titleRect;
-        titleRect.left = 0;
-        titleRect.top = rc.bottom / 4 - 60;
-        titleRect.right = rc.right;
-        titleRect.bottom = rc.bottom / 4;
-        
-        SetTextColor(memdc, RGB(255, 215, 0));
-        DrawTextW(memdc, L"Майами: уроки свободы", -1, &titleRect, DT_CENTER | DT_SINGLELINE);
-        
-        SelectObject(memdc, button_font_);
-        SetTextColor(memdc, RGB(200, 200, 220));
-        
-        BitBlt(hdc, 0, 0, rc.right, rc.bottom, memdc, 0, 0, SRCCOPY);
-        SelectObject(memdc, oldFont);
-        DeleteObject(back);
-        DeleteDC(memdc);
-    }
     
-    void on_command(WORD id) {
-        if (id == IDC_START_GAME) {
-            ShowLoadingScreen();
+        ~MainMenu() {
+            if (title_font_) DeleteObject(title_font_);
+            if (button_font_) DeleteObject(button_font_);
+            if (settings_font_) DeleteObject(settings_font_);
+        }
+    
+        void on_paint(HDC hdc) {
+            RECT rc;
+            GetClientRect(hwnd_, &rc);
             
-            g_appState = STATE_GAME;
-            ShowWindow(hwnd_, SW_HIDE);
+            HDC memdc = CreateCompatibleDC(hdc);
+            HBITMAP back = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+            HGDIOBJ old = SelectObject(memdc, back);
             
-            if (g_gameApp && g_gameWindow) {
-                g_gameApp->reset_game();
-                HideLoadingScreen();
-                ShowWindow(g_gameWindow, SW_SHOW);
-                SetForegroundWindow(g_gameWindow);
-            } else {
-                HINSTANCE hInst = GetModuleHandleW(nullptr);
-                
-                g_gameWindow = CreateWindowExW(
-                    WS_EX_TOPMOST, L"GameWindowClass", L"Майами: уроки свободы",
-                    WS_POPUP | WS_VISIBLE,
-                    0, 0,
-                    GetSystemMetrics(SM_CXSCREEN),
-                    GetSystemMetrics(SM_CYSCREEN),
-                    nullptr, nullptr, hInst, nullptr
+            // Градиентный фон
+            for (int y = 0; y < rc.bottom; y++) {
+                COLORREF color = RGB(
+                    20 + (y * 15 / rc.bottom),
+                    15 + (y * 10 / rc.bottom),
+                    35 + (y * 20 / rc.bottom)
                 );
+                HPEN pen = CreatePen(PS_SOLID, 1, color);
+                HBRUSH brush = CreateSolidBrush(color);
+                SelectObject(memdc, pen);
+                SelectObject(memdc, brush);
+                Rectangle(memdc, 0, y, rc.right, y + 1);
+                DeleteObject(pen);
+                DeleteObject(brush);
+            }
+            
+            // Декоративные круги
+            HPEN goldPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
+            HBRUSH oldBrush = (HBRUSH)SelectObject(memdc, GetStockObject(NULL_BRUSH));
+            
+            for (int i = 0; i < 3; i++) {
+                SelectObject(memdc, goldPen);
+                Ellipse(memdc, 50 + i * 150, 50, 150 + i * 150, 150);
+                Ellipse(memdc, rc.right - 150 - i * 150, rc.bottom - 150, rc.right - 50 - i * 150, rc.bottom - 50);
+            }
+            
+            SelectObject(memdc, oldBrush);
+            DeleteObject(goldPen);
+            
+            SetBkMode(memdc, TRANSPARENT);
+            
+            // Заголовок
+            HFONT oldFont = (HFONT)SelectObject(memdc, title_font_);
+            RECT titleRect = {0, rc.bottom / 4 - 60, rc.right, rc.bottom / 4};
+            SetTextColor(memdc, RGB(255, 215, 0));
+            DrawTextW(memdc, L"Майами: уроки свободы", -1, &titleRect, DT_CENTER | DT_SINGLELINE);
+            
+            // Если настройки открыты, рисуем их сверху
+            if (show_settings_) {
+                // Полупрозрачный фон для настроек
+                RECT settingsRect = {rc.right / 2 - 200, rc.bottom / 6 - 60, rc.right / 2 + 200, rc.bottom / 6 + 200};
+                HBRUSH darkBrush = CreateSolidBrush(RGB(30, 30, 45));
+                FillRect(memdc, &settingsRect, darkBrush);
+                DeleteObject(darkBrush);
                 
-                if (g_gameWindow) {
-                    g_gameApp = new VisualNovelApp(g_gameWindow);
-                    SetWindowLongPtrW(g_gameWindow, GWLP_USERDATA, (LONG_PTR)g_gameApp);
+                // Рамка
+                HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
+                SelectObject(memdc, borderPen);
+                Rectangle(memdc, settingsRect.left, settingsRect.top, settingsRect.right, settingsRect.bottom);
+                DeleteObject(borderPen);
+                
+                // Заголовок настроек
+                SelectObject(memdc, settings_font_);
+                RECT settingsTitleRect = settingsRect;
+                settingsTitleRect.top += 10;
+                settingsTitleRect.bottom = settingsTitleRect.top + 35;
+                SetTextColor(memdc, RGB(255, 215, 0));
+                DrawTextW(memdc, L"Настройки звука", -1, &settingsTitleRect, DT_CENTER | DT_SINGLELINE);
+                
+                // Громкость
+                SelectObject(memdc, settings_font_);
+                SetTextColor(memdc, RGB(200, 200, 220));
+                RECT volTextRect = {settingsRect.left + 20, settingsRect.top + 55, settingsRect.right - 100, settingsRect.top + 85};
+                DrawTextW(memdc, L"Громкость:", -1, &volTextRect, DT_LEFT | DT_SINGLELINE);
+                
+                // Текущая громкость
+                wchar_t volText[32];
+                wsprintfW(volText, L"%d%%", g_settings.volume);
+                RECT volValueRect = {settingsRect.left + 130, settingsRect.top + 55, settingsRect.right - 50, settingsRect.top + 85};
+                DrawTextW(memdc, volText, -1, &volValueRect, DT_LEFT | DT_SINGLELINE);
+                
+                // Звук
+                RECT soundTextRect = {settingsRect.left + 20, settingsRect.top + 95, settingsRect.right - 100, settingsRect.top + 125};
+                DrawTextW(memdc, g_settings.sound_enabled ? L"Звук: Включен" : L"Звук: Выключен", -1, &soundTextRect, DT_LEFT | DT_SINGLELINE);
+            }
+            
+            SelectObject(memdc, button_font_);
+            SetTextColor(memdc, RGB(200, 200, 220));
+            
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, memdc, 0, 0, SRCCOPY);
+            SelectObject(memdc, oldFont);
+            DeleteObject(back);
+            DeleteDC(memdc);
+        }
+    
+        void on_command(WORD id) {
+            if (id == IDC_START_GAME) {
+                ShowLoadingScreen();
+                g_appState = STATE_GAME;
+                ShowWindow(hwnd_, SW_HIDE);
+                
+                if (g_gameApp && g_gameWindow) {
+                    g_gameApp->reset_game();
                     HideLoadingScreen();
                     ShowWindow(g_gameWindow, SW_SHOW);
-                    UpdateWindow(g_gameWindow);
+                    SetForegroundWindow(g_gameWindow);
                 } else {
-                    HideLoadingScreen();
+                    HINSTANCE hInst = GetModuleHandleW(nullptr);
+                    g_gameWindow = CreateWindowExW(
+                        WS_EX_TOPMOST, L"GameWindowClass", L"Майами: уроки свободы",
+                        WS_POPUP | WS_VISIBLE, 0, 0,
+                        1600, 900,
+                        nullptr, nullptr, hInst, nullptr);
+                    
+                    if (g_gameWindow) {
+                        g_gameApp = new VisualNovelApp(g_gameWindow);
+                        SetWindowLongPtrW(g_gameWindow, GWLP_USERDATA, (LONG_PTR)g_gameApp);
+                        HideLoadingScreen();
+                        ShowWindow(g_gameWindow, SW_SHOW);
+                        UpdateWindow(g_gameWindow);
+                    } else {
+                        HideLoadingScreen();
+                    }
                 }
             }
+            else if (id == IDC_SETTINGS) {
+                show_settings_ = !show_settings_;
+                // Показываем/скрываем кнопки настроек
+                ShowWindow(vol_down_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+                ShowWindow(vol_up_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+                ShowWindow(sound_toggle_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+                ShowWindow(close_settings_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+                InvalidateRect(hwnd_, nullptr, TRUE);
+            }
+            else if (id == IDC_VOLUME_UP) {
+                change_volume(10);
+            }
+            else if (id == IDC_VOLUME_DOWN) {
+                change_volume(-10);
+            }
+            else if (id == IDC_SOUND_TOGGLE) {
+                g_settings.sound_enabled = !g_settings.sound_enabled;
+                if (g_gameApp) {
+                    g_gameApp->set_sound_enabled(g_settings.sound_enabled);
+                }
+                InvalidateRect(hwnd_, nullptr, TRUE);
+            }
+            else if (id == IDC_CLOSE_SETTINGS) {
+                show_settings_ = false;
+                ShowWindow(vol_down_btn_, SW_HIDE);
+                ShowWindow(vol_up_btn_, SW_HIDE);
+                ShowWindow(sound_toggle_btn_, SW_HIDE);
+                ShowWindow(close_settings_btn_, SW_HIDE);
+                InvalidateRect(hwnd_, nullptr, TRUE);
+            }
+            else if (id == IDC_EXIT_GAME) {
+                PostQuitMessage(0);
+            }
         }
-        else if (id == IDC_SETTINGS) {
-            MessageBoxW(hwnd_, L"Настройки будут доступны в следующей версии!", 
-                        L"Информация", MB_OK | MB_ICONINFORMATION);
+    
+        void on_resize() {
+            RECT rc;
+            GetClientRect(hwnd_, &rc);
+            int centerX = rc.right / 2;
+            
+            // Основные кнопки (в центре)
+            MoveWindow(start_btn_, centerX - 150, rc.bottom / 2 - 40, 300, 50, TRUE);
+            MoveWindow(settings_btn_, centerX - 150, rc.bottom / 2 + 30, 300, 50, TRUE);
+            MoveWindow(exit_btn_, centerX - 150, rc.bottom / 2 + 100, 300, 50, TRUE);
+            
+            // Кнопки настроек (сверху)
+            int settingsY = rc.bottom / 6 - 20;
+            int settingsCenterX = rc.right / 2;
+            
+            // Кнопки для громкости
+            MoveWindow(vol_down_btn_, settingsCenterX - 20, settingsY + 10, 40, 35, TRUE);
+            MoveWindow(vol_up_btn_, settingsCenterX + 60, settingsY + 10, 40, 35, TRUE);
+            
+            // Кнопка переключения звука
+            MoveWindow(sound_toggle_btn_, settingsCenterX - 190, settingsY + 95, 200, 35, TRUE);
+            
+            // Кнопка закрытия
+            MoveWindow(close_settings_btn_, settingsCenterX - 75, settingsY + 170, 150, 35, TRUE);
         }
-        else if (id == IDC_EXIT_GAME) {
-            PostQuitMessage(0);
+    
+    private:
+        HWND hwnd_;
+        HWND start_btn_;
+        HWND settings_btn_;
+        HWND exit_btn_;
+        HWND g_gameWindow;
+        HFONT title_font_;
+        HFONT button_font_;
+        HFONT settings_font_;
+        bool show_settings_;
+        
+        // Кнопки настроек
+        HWND vol_down_btn_;
+        HWND vol_up_btn_;
+        HWND sound_toggle_btn_;
+        HWND close_settings_btn_;
+        
+        static constexpr int IDC_START_GAME = 2001;
+        static constexpr int IDC_SETTINGS = 2002;
+        static constexpr int IDC_EXIT_GAME = 2003;
+        static constexpr int IDC_VOLUME_UP = 2006;
+        static constexpr int IDC_VOLUME_DOWN = 2007;
+        static constexpr int IDC_SOUND_TOGGLE = 2008;
+        static constexpr int IDC_CLOSE_SETTINGS = 2009;
+    
+        void create_controls() {
+            title_font_ = CreateFontW(-48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+            
+            button_font_ = CreateFontW(-24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+            
+            settings_font_ = CreateFontW(-18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            
+            start_btn_ = CreateWindowW(L"BUTTON", L"Начать игру", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                0, 0, 300, 50, hwnd_, (HMENU)IDC_START_GAME, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(start_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+            
+            settings_btn_ = CreateWindowW(L"BUTTON", L"Настройки", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                0, 0, 300, 50, hwnd_, (HMENU)IDC_SETTINGS, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(settings_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+            
+            exit_btn_ = CreateWindowW(L"BUTTON", L"Выход", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                0, 0, 300, 50, hwnd_, (HMENU)IDC_EXIT_GAME, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(exit_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+            
+            // Кнопки настроек (изначально скрыты)
+            vol_down_btn_ = CreateWindowW(L"BUTTON", L"◀", WS_CHILD | BS_PUSHBUTTON,
+                0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_DOWN, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(vol_down_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+            ShowWindow(vol_down_btn_, SW_HIDE);
+            
+            vol_up_btn_ = CreateWindowW(L"BUTTON", L"▶", WS_CHILD | BS_PUSHBUTTON,
+                0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_UP, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(vol_up_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+            ShowWindow(vol_up_btn_, SW_HIDE);
+            
+            sound_toggle_btn_ = CreateWindowW(L"BUTTON", L"Вкл/Выкл звук", WS_CHILD | BS_PUSHBUTTON,
+                0, 0, 200, 35, hwnd_, (HMENU)IDC_SOUND_TOGGLE, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(sound_toggle_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+            ShowWindow(sound_toggle_btn_, SW_HIDE);
+            
+            close_settings_btn_ = CreateWindowW(L"BUTTON", L"Закрыть", WS_CHILD | BS_PUSHBUTTON,
+                0, 0, 150, 35, hwnd_, (HMENU)IDC_CLOSE_SETTINGS, GetModuleHandleW(nullptr), nullptr);
+            SendMessageW(close_settings_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+            ShowWindow(close_settings_btn_, SW_HIDE);
+            
+            on_resize();
         }
-    }
-    
-    void on_resize() {
-        RECT rc;
-        GetClientRect(hwnd_, &rc);
-        int centerX = rc.right / 2;
-        MoveWindow(start_btn_, centerX - 150, rc.bottom / 2 - 40, 300, 50, TRUE);
-        MoveWindow(settings_btn_, centerX - 150, rc.bottom / 2 + 30, 300, 50, TRUE);
-        MoveWindow(exit_btn_, centerX - 150, rc.bottom / 2 + 100, 300, 50, TRUE);
-    }
-    
-private:
-    HWND hwnd_;
-    HWND start_btn_;
-    HWND settings_btn_;
-    HWND exit_btn_;
-    HWND g_gameWindow;
-    HFONT title_font_;
-    HFONT button_font_;
-    static constexpr int IDC_START_GAME = 2001;
-    static constexpr int IDC_SETTINGS = 2002;
-    static constexpr int IDC_EXIT_GAME = 2003;
-    
-    void create_controls() {
-        title_font_ = CreateFontW(-48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
-        button_font_ = CreateFontW(-24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
         
-        start_btn_ = CreateWindowW(L"BUTTON", L"Начать игру", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 300, 50, hwnd_, (HMENU)IDC_START_GAME, GetModuleHandleW(nullptr), nullptr);
-        SendMessageW(start_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-        
-        settings_btn_ = CreateWindowW(L"BUTTON", L"Настройки", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 300, 50, hwnd_, (HMENU)IDC_SETTINGS, GetModuleHandleW(nullptr), nullptr);
-        SendMessageW(settings_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-        
-        exit_btn_ = CreateWindowW(L"BUTTON", L"Выход", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 300, 50, hwnd_, (HMENU)IDC_EXIT_GAME, GetModuleHandleW(nullptr), nullptr);
-        SendMessageW(exit_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-        on_resize();
-    }
-};
+        void change_volume(int delta) {
+            int new_volume = g_settings.volume + delta;
+            if (new_volume >= 0 && new_volume <= 100) {
+                g_settings.volume = new_volume;
+                InvalidateRect(hwnd_, nullptr, TRUE);
+            }
+        }
+    };
 
 // ==================== ОБРАБОТЧИКИ ОКОН ====================
 LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

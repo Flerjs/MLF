@@ -25,7 +25,7 @@ public:
     void Initialize() {
         int counter = 1;
         
-        // ========== СЦЕНЫ 1-32 (ДО ПЕРВОГО ВЫБОРА) ==========
+        // ========== СЦЕНЫ 1-33 (ДО ПЕРВОГО ВЫБОРА) ==========
         AddScene(getName(counter++), L"", L"...", false, L"", L"room");
         AddScene(getName(counter++), L"", L"Ну вот.", false, L"", L"room");
         AddScene(getName(counter++), L"", L"Вот и наступил третий понедельник.", false, L"", L"room");
@@ -69,97 +69,144 @@ public:
         sleepChoice.has_choices = true;
         sleepChoice.choices.push_back({L"Плохо", L""});
         sleepChoice.choices.push_back({L"Нормально", L""});
-        sleepChoice.choice_targets[1] = L"sleep_bad";
-        sleepChoice.choice_targets[2] = L"sleep_normal";
+        sleepChoice.choice_targets[1] = L"sleep_bad_start";
+        sleepChoice.choice_targets[2] = L"sleep_normal_start";
         scenes[L"sleep_choice"] = sleepChoice;
         
-        // ========== ВЕТКА "ПЛОХО" (33-37) ==========
-        AddScene(L"sleep_bad", L"Луис", L"Плохо, если честно.", true, L"Луис", L"kitchen");
-        AddScene(getName(counter++), L"Луис", L"Половину ночи смотрел видеоролики и во время просмотра отрубился.", true, L"Луис", L"kitchen");
-        AddScene(getName(counter++), L"", L"Мама взглянула на меня так, словно расстроилась.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"Мама", L"Ну ты даёшь... Ты же понимаешь, что скоро у тебя не получится так жить?", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"Мама", L"Тебе скоро выходить на работу, и как ты собираешься работать, если эти твои ролики для тебя важнее сна?", false, L"", L"kitchen");
+        // ========== ВЕТКА "ПЛОХО" ==========
+        AddScene(L"sleep_bad_start", L"Луис", L"Плохо, если честно.", true, L"Луис", L"kitchen");
+        AddScene(L"sleep_bad_2", L"Луис", L"Половину ночи смотрел видеоролики и во время просмотра отрубился.", true, L"Луис", L"kitchen");
+        AddScene(L"sleep_bad_3", L"", L"Мама взглянула на меня так, словно расстроилась.", false, L"", L"kitchen");
+        AddScene(L"sleep_bad_4", L"Мама", L"Ну ты даёшь... Ты же понимаешь, что скоро у тебя не получится так жить?", false, L"", L"kitchen");
+        AddScene(L"sleep_bad_5", L"Мама", L"Тебе скоро выходить на работу, и как ты собираешься работать, если эти твои ролики для тебя важнее сна?", false, L"", L"kitchen");
+        AddScene(L"sleep_bad_end", L"Луис", L"Мам, я понимаю.", true, L"Луис", L"kitchen");
         
-        // ========== ВЕТКА "НОРМАЛЬНО" (38-41) ==========
-        AddScene(L"sleep_normal", L"Луис", L"Нормально, я думаю. Спал как спал.", true, L"Луис", L"kitchen");
-        AddScene(getName(counter++), L"", L"Мама с лёгким подозрением взглянула на меня.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"Мама", L"Врёшь же. Лу, ну зачем ты так? Снова не спал?", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"Мама", L"Тебе скоро выходить на работу, а ты даже режим сна привести в порядок не можешь? Понимаешь, что так не пойдёт?", false, L"", L"kitchen");
+        // ========== ВЕТКА "НОРМАЛЬНО" ==========
+        AddScene(L"sleep_normal_start", L"Луис", L"Нормально, я думаю. Спал как спал.", true, L"Луис", L"kitchen");
+        AddScene(L"sleep_normal_2", L"", L"Мама с лёгким подозрением взглянула на меня.", false, L"", L"kitchen");
+        AddScene(L"sleep_normal_3", L"Мама", L"Врёшь же. Лу, ну зачем ты так? Снова не спал?", false, L"", L"kitchen");
+        AddScene(L"sleep_normal_4", L"Мама", L"Тебе скоро выходить на работу, а ты даже режим сна привести в порядок не можешь? Понимаешь, что так не пойдёт?", false, L"", L"kitchen");
+        AddScene(L"sleep_normal_end", L"Луис", L"Мам, я понимаю.", true, L"Луис", L"kitchen");
         
-        // ========== ОБЩАЯ ЧАСТЬ ПОСЛЕ ВЫБОРА (42-58) ==========
-        AddScene(getName(counter++), L"Луис", L"Мам, я понимаю.", true, L"Луис", L"kitchen");
-        AddScene(getName(counter++), L"Мама", L"Понимает он... Ладно, завтракай. Я на работу.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"Луис", L"Хорошо.", true, L"Луис", L"kitchen");
-        AddScene(getName(counter++), L"", L"После этого мама спокойно обернулась и вышла из дома.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Она всегда такая.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Она переживает за меня, и я понимаю это.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Но иногда это немного выходило за рамки. И всё же я не могу судить её за это.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Я сел за стол и взглянул на свою тарелку, которую для меня приготовила мама.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Как обычно, яичница с беконом.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"За всё это время я настолько успел привыкнуть к этому, что уже почти забыл, какое это блюдо на вкус.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Тем не менее, завтракать в тишине не хотелось, и я достал телефон.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Включив экран, я увидел видеоролик, который запустился автоматически после предыдущего.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Это был какой-то музыкальный клип. По всей видимости, рок-группы, которую я не знаю.", false, L"", L"kitchen");
+        // ========== ОБЩАЯ ЧАСТЬ ПОСЛЕ ВЫБОРА ==========
+        AddScene(L"after_sleep_1", L"Мама", L"Понимает он... Ладно, завтракай. Я на работу.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_2", L"Луис", L"Хорошо.", true, L"Луис", L"kitchen");
+        AddScene(L"after_sleep_3", L"", L"После этого мама спокойно обернулась и вышла из дома.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_4", L"", L"Она всегда такая.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_5", L"", L"Она переживает за меня, и я понимаю это.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_6", L"", L"Но иногда это немного выходило за рамки. И всё же я не могу судить её за это.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_7", L"", L"Я сел за стол и взглянул на свою тарелку, которую для меня приготовила мама.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_8", L"", L"Как обычно, яичница с беконом.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_9", L"", L"За всё это время я настолько успел привыкнуть к этому, что уже почти забыл, какое это блюдо на вкус.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_10", L"", L"Тем не менее, завтракать в тишине не хотелось, и я достал телефон.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_11", L"", L"Включив экран, я увидел видеоролик, который запустился автоматически после предыдущего.", false, L"", L"kitchen");
+        AddScene(L"after_sleep_12", L"", L"Это был какой-то музыкальный клип. По всей видимости, рок-группы, которую я не знаю.", false, L"", L"kitchen");
         
         // ========== СЦЕНА С ВЫБОРОМ ВИДЕО ==========
         SceneNode videoChoice;
         videoChoice.speaker = L"";
-        videoChoice.text = L"Это был какой-то музыкальный клип. По всей видимости, рок-группы, которую я не знаю.";
+        videoChoice.text = L"Включать ли?";
         videoChoice.has_sprite = false;
         videoChoice.background_name = L"kitchen";
         videoChoice.has_choices = true;
         videoChoice.choices.push_back({L"Включить клип", L""});
         videoChoice.choices.push_back({L"Следующее видео", L""});
-        videoChoice.choice_targets[1] = L"watch_clip";
-        videoChoice.choice_targets[2] = L"next_video";
+        videoChoice.choice_targets[1] = L"watch_clip_start";
+        videoChoice.choice_targets[2] = L"next_video_start";
         scenes[L"video_choice"] = videoChoice;
         
-        // ========== ВЕТКА "ВКЛЮЧИТЬ КЛИП" (59-67) ==========
-        AddScene(L"watch_clip", L"", L"Я решил включить клип, раз уж он мне попался.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Ничего необычного. Просто рок-песня под визуальное сопровождение.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Однако...", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Почему-то я не мог отвести взгляд от экрана телефона, даже когда ел.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Я даже не заметил, как к концу клипа вся тарелка уже была съедена.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Этот клип...", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Чем эти ребята так меня зацепили?", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Мне понравился смысл их песни, и выглядят они неплохо...", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Я сохранил этот клип в избранное и закрыл телефон.", false, L"", L"kitchen");
+        // ========== ВЕТКА "ВКЛЮЧИТЬ КЛИП" ==========
+        AddScene(L"watch_clip_start", L"", L"Я решил включить клип, раз уж он мне попался.", false, L"", L"kitchen");
+        AddScene(L"watch_clip_2", L"", L"Ничего необычного. Просто рок-песня под визуальное сопровождение.", false, L"", L"kitchen");
+        AddScene(L"watch_clip_3", L"", L"Однако...", false, L"", L"kitchen");
+        AddScene(L"watch_clip_4", L"", L"Почему-то я не мог отвести взгляд от экрана телефона, даже когда ел.", false, L"", L"kitchen");
+        AddScene(L"watch_clip_5", L"", L"Я даже не заметил, как к концу клипа вся тарелка уже была съедена.", false, L"", L"kitchen");
+        AddScene(L"watch_clip_6", L"", L"Этот клип...", false, L"", L"kitchen");
+        AddScene(L"watch_clip_7", L"", L"Чем эти ребята так меня зацепили?", false, L"", L"kitchen");
+        AddScene(L"watch_clip_8", L"", L"Мне понравился смысл их песни, и выглядят они неплохо...", false, L"", L"kitchen");
+        AddScene(L"watch_clip_end", L"", L"Я сохранил этот клип в избранное и закрыл телефон.", false, L"", L"kitchen");
         
-        // ========== ВЕТКА "СЛЕДУЮЩЕЕ ВИДЕО" (68-72) ==========
-        AddScene(L"next_video", L"", L"Я решил пролистнуть этот клип, и мне попалось научное видео про пантер.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Так я и провёл свой завтрак.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Оказывается, пантеры отлично умеют лазать по деревьям.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Умеют приспособиться и к такой ситуации...", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Уж лучше дружить с какой-нибудь пантерой, нежели быть её целью.", false, L"", L"kitchen");
+        // ========== ВЕТКА "СЛЕДУЮЩЕЕ ВИДЕО" ==========
+        AddScene(L"next_video_start", L"", L"Я решил пролистнуть этот клип, и мне попалось научное видео про пантер.", false, L"", L"kitchen");
+        AddScene(L"next_video_2", L"", L"Так я и провёл свой завтрак.", false, L"", L"kitchen");
+        AddScene(L"next_video_3", L"", L"Оказывается, пантеры отлично умеют лазать по деревьям.", false, L"", L"kitchen");
+        AddScene(L"next_video_4", L"", L"Умеют приспособиться и к такой ситуации...", false, L"", L"kitchen");
+        AddScene(L"next_video_end", L"", L"Уж лучше дружить с какой-нибудь пантерой, нежели быть её целью.", false, L"", L"kitchen");
         
-        // ========== ФИНАЛЬНЫЕ СЦЕНЫ (73-76) ==========
-        AddScene(getName(counter++), L"", L"...", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Сегодня мне предстояло пройтись по магазинам, поэтому я быстро вымыл тарелки и поставил их на сушилку.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Нужно купить немного продуктов, которые уже закончились. Мама скинула мне список ещё вчера.", false, L"", L"kitchen");
-        AddScene(getName(counter++), L"", L"Пора снова выйти на улицу.", false, L"", L"kitchen");
+        // ========== ФИНАЛЬНЫЕ СЦЕНЫ ==========
+        AddScene(L"final_1", L"", L"...", false, L"", L"kitchen");
+        AddScene(L"final_2", L"", L"Сегодня мне предстояло пройтись по магазинам, поэтому я быстро вымыл тарелки и поставил их на сушилку.", false, L"", L"kitchen");
+        AddScene(L"final_3", L"", L"Нужно купить немного продуктов, которые уже закончились. Мама скинула мне список ещё вчера.", false, L"", L"kitchen");
+        AddScene(L"final_4", L"", L"Пора снова выйти на улицу.", false, L"", L"kitchen");
         
         // ========== СВЯЗЫВАНИЕ СЦЕН ==========
         LinkScenes();
     }
     
     void LinkScenes() {
-        // Связываем обычные сцены по порядку (scene_1 -> scene_2 -> ...)
-        for (int i = 1; i <= 76; i++) {
+        // Связываем обычные сцены по порядку
+        for (int i = 1; i <= 33; i++) {
             std::wstring current = L"scene_" + std::to_wstring(i);
             std::wstring next = L"scene_" + std::to_wstring(i + 1);
-            
             if (scenes.find(next) != scenes.end()) {
                 scene_links[current] = next;
             }
         }
         
-        // Специальные связи
-        scene_links[L"scene_33"] = L"sleep_choice";      // после 32 сцены идет выбор сна
-        scene_links[L"sleep_bad"] = L"scene_34";         // после плохого сна -> сцена 34
-        scene_links[L"sleep_normal"] = L"scene_39";      // после нормального сна -> сцена 39
-        scene_links[L"scene_58"] = L"video_choice";      // после 58 сцены идет выбор видео
-        scene_links[L"watch_clip"] = L"scene_73";        // после клипа -> сцена 60
-        scene_links[L"next_video"] = L"scene_73";        // после следующего видео -> сцена 69
+        // Связываем последнюю сцену перед выбором с выбором
+        scene_links[L"scene_33"] = L"sleep_choice";
+        
+        // Связываем ветку "Плохо"
+        scene_links[L"sleep_bad_start"] = L"sleep_bad_2";
+        scene_links[L"sleep_bad_2"] = L"sleep_bad_3";
+        scene_links[L"sleep_bad_3"] = L"sleep_bad_4";
+        scene_links[L"sleep_bad_4"] = L"sleep_bad_5";
+        scene_links[L"sleep_bad_5"] = L"sleep_bad_end";
+        scene_links[L"sleep_bad_end"] = L"after_sleep_1";
+        
+        // Связываем ветку "Нормально"
+        scene_links[L"sleep_normal_start"] = L"sleep_normal_2";
+        scene_links[L"sleep_normal_2"] = L"sleep_normal_3";
+        scene_links[L"sleep_normal_3"] = L"sleep_normal_4";
+        scene_links[L"sleep_normal_4"] = L"sleep_normal_end";
+        scene_links[L"sleep_normal_end"] = L"after_sleep_1";
+        
+        // Связываем общую часть
+        scene_links[L"after_sleep_1"] = L"after_sleep_2";
+        scene_links[L"after_sleep_2"] = L"after_sleep_3";
+        scene_links[L"after_sleep_3"] = L"after_sleep_4";
+        scene_links[L"after_sleep_4"] = L"after_sleep_5";
+        scene_links[L"after_sleep_5"] = L"after_sleep_6";
+        scene_links[L"after_sleep_6"] = L"after_sleep_7";
+        scene_links[L"after_sleep_7"] = L"after_sleep_8";
+        scene_links[L"after_sleep_8"] = L"after_sleep_9";
+        scene_links[L"after_sleep_9"] = L"after_sleep_10";
+        scene_links[L"after_sleep_10"] = L"after_sleep_11";
+        scene_links[L"after_sleep_11"] = L"after_sleep_12";
+        scene_links[L"after_sleep_12"] = L"video_choice";
+        
+        // Связываем ветку "Включить клип"
+        scene_links[L"watch_clip_start"] = L"watch_clip_2";
+        scene_links[L"watch_clip_2"] = L"watch_clip_3";
+        scene_links[L"watch_clip_3"] = L"watch_clip_4";
+        scene_links[L"watch_clip_4"] = L"watch_clip_5";
+        scene_links[L"watch_clip_5"] = L"watch_clip_6";
+        scene_links[L"watch_clip_6"] = L"watch_clip_7";
+        scene_links[L"watch_clip_7"] = L"watch_clip_8";
+        scene_links[L"watch_clip_8"] = L"watch_clip_end";
+        scene_links[L"watch_clip_end"] = L"final_1";
+        
+        // Связываем ветку "Следующее видео"
+        scene_links[L"next_video_start"] = L"next_video_2";
+        scene_links[L"next_video_2"] = L"next_video_3";
+        scene_links[L"next_video_3"] = L"next_video_4";
+        scene_links[L"next_video_4"] = L"next_video_end";
+        scene_links[L"next_video_end"] = L"final_1";
+        
+        // Связываем финальные сцены
+        scene_links[L"final_1"] = L"final_2";
+        scene_links[L"final_2"] = L"final_3";
+        scene_links[L"final_3"] = L"final_4";
     }
     
     std::wstring GetNextScene(const std::wstring& current_scene) {

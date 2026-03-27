@@ -638,10 +638,18 @@ explicit VisualNovelApp(HWND hwnd)
     
         if (id >= IDC_CHOICE1 && id <= IDC_CHOICE4) {
             int idx = id - IDC_CHOICE1;
+            
             if (idx >= 0 && idx < static_cast<int>(current_choices_.size())) {
+                // Отладочный вывод
+                OutputDebugStringW((L"Выбран вариант " + std::to_wstring(idx + 1)).c_str());
+                
                 disable_choices();
                 auto cb = current_choices_[idx].action;
-                if (cb) cb();
+                if (cb) {
+                    cb();
+                }
+                // ВАЖНО: возвращаемся, чтобы не выполнять другой код
+                return;
             }
         }
     }
@@ -1080,7 +1088,7 @@ void disable_choices() {
             return;
         }
         
-        play_scene(L"scene_1");
+        play_scene(L"scene_32");
     }
     
     void play_scene(const std::wstring& scene_name) {
@@ -1092,19 +1100,20 @@ void disable_choices() {
         
         SceneNode& scene = it->second;
         
-        // Устанавливаем фон
+        // Устанавливаем фон и спрайт
         if (!scene.background_name.empty()) {
             set_background_by_name(scene.background_name);
         }
         
-        // Устанавливаем спрайт
         if (scene.has_sprite && !scene.sprite_name.empty()) {
             set_character_sprite_by_name(scene.sprite_name, true);
         } else {
             hide_character_sprite();
         }
         
-        // Проверяем, есть ли выбор
+        // Получаем следующую сцену из связей
+        std::wstring next_scene = scene_data_.GetNextScene(scene_name);
+        
         if (scene.has_choices && !scene.choices.empty()) {
             // Сцена с выбором - показываем текст и потом кнопки
             animate_text(
@@ -1115,12 +1124,12 @@ void disable_choices() {
                         int choice_num = (int)i + 1;
                         auto it_target = scene.choice_targets.find(choice_num);
                         if (it_target != scene.choice_targets.end()) {
-                            std::wstring next_scene = it_target->second;
+                            std::wstring target_scene = it_target->second;
                             choices.push_back({
                                 scene.choices[i].first,
-                                [this, next_scene]() { 
-                                    // ВАЖНО: после выбора сразу переходим к следующей сцене
-                                    play_scene(next_scene); 
+                                [this, target_scene]() { 
+                                    // При выборе переходим в целевую сцену
+                                    play_scene(target_scene); 
                                 }
                             });
                         }
@@ -1132,9 +1141,7 @@ void disable_choices() {
             );
         } else {
             // Обычная сцена
-            std::wstring next_scene = scene_data_.GetNextScene(scene_name);
             std::function<void()> next_action = nullptr;
-            
             if (!next_scene.empty()) {
                 next_action = [this, next_scene]() { 
                     play_scene(next_scene); 

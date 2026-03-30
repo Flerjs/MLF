@@ -13,10 +13,6 @@
 #include <sstream>
 #include "scenes_data.h"
 
-void DebugLog(const std::wstring& msg) {
-    OutputDebugStringW((msg + L"\n").c_str());
-}
-
 #pragma comment(lib, "Gdiplus.lib")
 #pragma comment(lib, "Winmm.lib")
 
@@ -27,21 +23,20 @@ class VisualNovelApp;
 // Флаги для состояния приложения
 enum AppState {
     STATE_MENU,
-    STATE_GAME
+    STATE_GAME,
+    STATE_LOADING
 };
 
 // Глобальные переменные
 AppState g_appState = STATE_MENU;
 VisualNovelApp* g_gameApp = nullptr;
 HWND g_mainHwnd = nullptr;
-HWND g_gameWindow = nullptr;
 bool g_isFullscreen = true;
-HWND g_loadingHwnd = nullptr;
+int g_screenWidth = 0;
+int g_screenHeight = 0;
 
 // Структура для хранения настроек
 struct GameSettings {
-    int screen_width = 1920;
-    int screen_height = 1080;
     int volume = 100;
     bool sound_enabled = true;
 };
@@ -54,7 +49,14 @@ enum ControlIds {
     IDC_CHOICE2 = 1102,
     IDC_CHOICE3 = 1103,
     IDC_CHOICE4 = 1104,
-    IDC_EXIT = 1202
+    IDC_EXIT = 1202,
+    IDC_START_GAME = 2001,
+    IDC_SETTINGS = 2002,
+    IDC_EXIT_GAME = 2003,
+    IDC_VOLUME_UP = 2006,
+    IDC_VOLUME_DOWN = 2007,
+    IDC_SOUND_TOGGLE = 2008,
+    IDC_CLOSE_SETTINGS = 2009
 };
 
 struct ActiveSound {
@@ -87,103 +89,46 @@ struct SceneData {
 };
 
 // ==================== ЗАГРУЗОЧНЫЙ ЭКРАН ====================
-LRESULT CALLBACK LoadingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        
-        HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
-        FillRect(hdc, &rc, blackBrush);
-        DeleteObject(blackBrush);
-        
-        SetBkMode(hdc, TRANSPARENT);
-        HFONT font = CreateFontW(48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
-        HFONT oldFont = (HFONT)SelectObject(hdc, font);
-        SetTextColor(hdc, RGB(255, 215, 0));
-        
-        RECT textRect;
-        textRect.left = rc.left;
-        textRect.top = rc.bottom / 2 - 50;
-        textRect.right = rc.right;
-        textRect.bottom = rc.bottom / 2;
-        
-        DrawTextW(hdc, L"ЗАГРУЗКА...", -1, &textRect, DT_CENTER | DT_SINGLELINE);
-        
-        static int dotCount = 0;
-        static DWORD lastTime = 0;
-        DWORD currentTime = GetTickCount();
-        if (currentTime - lastTime > 500) {
-            dotCount = (dotCount + 1) % 4;
-            lastTime = currentTime;
-        }
-        
-        std::wstring dots;
-        for (int i = 0; i < dotCount; i++) dots += L".";
-        
-        RECT dotsRect;
-        dotsRect.left = rc.left;
-        dotsRect.top = rc.bottom / 2 + 20;
-        dotsRect.right = rc.right;
-        dotsRect.bottom = rc.bottom / 2 + 80;
-        DrawTextW(hdc, dots.c_str(), -1, &dotsRect, DT_CENTER | DT_SINGLELINE);
-        
-        SelectObject(hdc, oldFont);
-        DeleteObject(font);
-        
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
-    case WM_ERASEBKGND:
-        return 1;
-    }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-void ShowLoadingScreen() {
-    if (g_loadingHwnd) return;
+void DrawLoadingScreen(HDC hdc, RECT rc) {
+    HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
+    FillRect(hdc, &rc, blackBrush);
+    DeleteObject(blackBrush);
     
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    SetBkMode(hdc, TRANSPARENT);
+    HFONT font = CreateFontW(48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+    HFONT oldFont = (HFONT)SelectObject(hdc, font);
+    SetTextColor(hdc, RGB(255, 215, 0));
     
-    WNDCLASSW loadingWc{};
-    loadingWc.lpfnWndProc = LoadingWndProc;
-    loadingWc.hInstance = hInst;
-    loadingWc.lpszClassName = L"LoadingWindowClass";
-    loadingWc.hCursor = LoadCursor(nullptr, IDC_WAIT);
-    loadingWc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    RegisterClassW(&loadingWc);
+    RECT textRect;
+    textRect.left = rc.left;
+    textRect.top = rc.bottom / 2 - 50;
+    textRect.right = rc.right;
+    textRect.bottom = rc.bottom / 2;
     
-    g_loadingHwnd = CreateWindowExW(
-        WS_EX_TOPMOST, L"LoadingWindowClass", L"Загрузка",
-        WS_POPUP | WS_VISIBLE,
-        0, 0,
-        GetSystemMetrics(SM_CXSCREEN),
-        GetSystemMetrics(SM_CYSCREEN),
-        nullptr, nullptr, hInst, nullptr
-    );
+    DrawTextW(hdc, L"ЗАГРУЗКА...", -1, &textRect, DT_CENTER | DT_SINGLELINE);
     
-    ShowWindow(g_loadingHwnd, SW_SHOW);
-    UpdateWindow(g_loadingHwnd);
-    
-    MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+    static int dotCount = 0;
+    static DWORD lastTime = 0;
+    DWORD currentTime = GetTickCount();
+    if (currentTime - lastTime > 500) {
+        dotCount = (dotCount + 1) % 4;
+        lastTime = currentTime;
     }
     
-    Sleep(1000);
-}
-
-void HideLoadingScreen() {
-    if (g_loadingHwnd) {
-        DestroyWindow(g_loadingHwnd);
-        g_loadingHwnd = nullptr;
-    }
+    std::wstring dots;
+    for (int i = 0; i < dotCount; i++) dots += L".";
+    
+    RECT dotsRect;
+    dotsRect.left = rc.left;
+    dotsRect.top = rc.bottom / 2 + 20;
+    dotsRect.right = rc.right;
+    dotsRect.bottom = rc.bottom / 2 + 80;
+    DrawTextW(hdc, dots.c_str(), -1, &dotsRect, DT_CENTER | DT_SINGLELINE);
+    
+    SelectObject(hdc, oldFont);
+    DeleteObject(font);
 }
 
 // ==================== КЛАСС SCENELOADER ====================
@@ -198,7 +143,6 @@ public:
         }
         std::ifstream file(narrow_filename);
         if (!file.is_open()) {
-            MessageBoxW(nullptr, L"Не удалось загрузить файл сцен!", L"Ошибка", MB_OK);
             return false;
         }
         
@@ -366,37 +310,94 @@ private:
 // ==================== КЛАСС ОСНОВНОЙ ИГРЫ ====================
 class VisualNovelApp {
 public:
-explicit VisualNovelApp(HWND hwnd)
-    : hwnd_(hwnd), text_index_(0), speed_ms_(6), has_key_(false), 
-      sound_index_(0), waiting_for_click_(false), sprite_needs_update_(true) {
-    srand(static_cast<unsigned>(time(nullptr)));
-    chars_per_tick_ = 2;
-    load_images();
-    preload_sprites();  // <-- ДОБАВЬТЕ ЭТУ СТРОКУ
-    create_controls();
-    start_game();
-}
-    
-~VisualNovelApp() {
-    for (auto* img : images_) delete img;
-    if (scaled_bg_cache_) delete scaled_bg_cache_;
-    if (scaled_character_cache_) delete scaled_character_cache_;
-    
-    // Очищаем кэш спрайтов (не нужно, так как они уже в images_)
-    sprite_cache_.clear();
-    
-    for (const auto& sound : active_sounds_) {
-        std::wstring close_cmd = L"close " + sound.alias;
-        mciSendStringW(close_cmd.c_str(), nullptr, 0, nullptr);
+    explicit VisualNovelApp(HWND hwnd)
+        : hwnd_(hwnd), text_index_(0), speed_ms_(6), has_key_(false), 
+        sound_index_(0), waiting_for_click_(false), sprite_needs_update_(true) {
+        srand(static_cast<unsigned>(time(nullptr)));
+        chars_per_tick_ = 2;
+        load_images();
+        preload_sprites();
+        create_controls();
     }
-    active_sounds_.clear();
     
-    if (sound_opened_) {
-        mciSendStringW(L"close textsnd", nullptr, 0, nullptr);
+    ~VisualNovelApp() {
+        for (auto* img : images_) delete img;
+        if (scaled_bg_cache_) delete scaled_bg_cache_;
+        if (scaled_character_cache_) delete scaled_character_cache_;
+        sprite_cache_.clear();
+        
+        for (const auto& sound : active_sounds_) {
+            std::wstring close_cmd = L"close " + sound.alias;
+            mciSendStringW(close_cmd.c_str(), nullptr, 0, nullptr);
+        }
+        active_sounds_.clear();
+        
+        if (sound_opened_) {
+            mciSendStringW(L"close textsnd", nullptr, 0, nullptr);
+        }
+        if (ui_font_) DeleteObject(ui_font_);
     }
-    if (ui_font_) DeleteObject(ui_font_);
-}
+    
+    void initialize_game() {
+        start_game();
+    }
 
+    void show() {
+        ShowWindow(exit_btn_, SW_SHOW);
+        // Если игра еще не инициализирована, запускаем
+        if (!game_initialized_) {
+            initialize_game();
+            game_initialized_ = true;
+        }
+        InvalidateRect(hwnd_, nullptr, TRUE);
+    }
+    
+    void hide() {
+        ShowWindow(exit_btn_, SW_HIDE);
+        // Скрываем кнопки выбора
+        for (int i = 0; i < 4; ++i) {
+            ShowWindow(choice_btns_[i], SW_HIDE);
+        }
+    }
+    
+    void start_game() {
+        previous_choice_.clear();
+        has_key_ = false;
+        clear_text();
+        
+        scene_data_.Initialize();
+        
+        if (scene_data_.scenes.empty()) {
+            MessageBoxW(hwnd_, L"Не удалось загрузить сцены!", L"Ошибка", MB_OK);
+            return;
+        }
+        
+        play_scene(L"scene_32");
+    }
+    
+    void reset_game() {
+        previous_choice_.clear();
+        has_key_ = false;
+        text_index_ = 0;
+        sound_counter_ = 0;
+        current_choices_.clear();
+        after_animation_ = nullptr;
+        waiting_for_click_ = false;
+        on_click_action_ = nullptr;
+        
+        keep_sprite_ = false;
+        sprite_needs_update_ = true;
+        character_sprite_ = nullptr;
+        
+        if (scaled_character_cache_) {
+            delete scaled_character_cache_;
+            scaled_character_cache_ = nullptr;
+        }
+        
+        clear_text();
+        start_game();
+    }
+    
     void on_paint(HDC hdc) {
         RECT rc;
         GetClientRect(hwnd_, &rc);
@@ -421,15 +422,13 @@ explicit VisualNovelApp(HWND hwnd)
             g.FillRectangle(&b, 0, 0, rc.right, rc.bottom);
         }
     
-        // ========== ОПТИМИЗИРОВАННАЯ ОТРИСОВКА СПРАЙТА ==========
+        // Отрисовка спрайта
         if (character_sprite_) {
-            // Увеличиваем размер в 1.5 раза (было 200x280, стало 300x420)
-            int sprite_width = 300;    // 200 * 1.5 = 300
-            int sprite_height = 420;   // 280 * 1.5 = 420
-            int sprite_x = w - sprite_width - 30;  // Справа с отступом 30px
-            int sprite_y = h - sprite_height - 200; // Поднимаем выше (было -120, стало -200)
+            int sprite_width = 300;
+            int sprite_height = 420;
+            int sprite_x = 33;
+            int sprite_y = h - sprite_height - 200;
             
-            // Создаем масштабированный кэш только один раз
             if (sprite_needs_update_) {
                 if (scaled_character_cache_) {
                     delete scaled_character_cache_;
@@ -453,7 +452,6 @@ explicit VisualNovelApp(HWND hwnd)
         const int panel_w = w - 48;
         const int panel_h = 170;
         
-        // Сохраняем область текста для кликов
         text_area_.rect.left = panel_x;
         text_area_.rect.right = panel_x + panel_w;
         text_area_.rect.top = panel_y;
@@ -486,7 +484,6 @@ explicit VisualNovelApp(HWND hwnd)
         Font text_font(&ff, 16.0f, FontStyleRegular, UnitPixel);
         SolidBrush text_brush(Color(245, 238, 238, 248));
     
-        // Имя говорящего
         if (!current_speaker_.empty()) {
             StringFormat center_fmt;
             center_fmt.SetAlignment(StringAlignmentCenter);
@@ -495,7 +492,6 @@ explicit VisualNovelApp(HWND hwnd)
             g.DrawString(current_speaker_.c_str(), -1, &name_font, name_rect, &center_fmt, &text_brush);
         }
     
-        // Текст
         StringFormat body_fmt;
         body_fmt.SetAlignment(StringAlignmentNear);
         body_fmt.SetLineAlignment(StringAlignmentNear);
@@ -531,76 +527,27 @@ explicit VisualNovelApp(HWND hwnd)
             }
         }
     }
-
+    
     void set_sound_enabled(bool enabled) {
         sound_enabled_ = enabled;
     }
-
-    void reset_game() {
-        previous_choice_.clear();
-        has_key_ = false;
-        text_index_ = 0;
-        sound_counter_ = 0;
-        current_choices_.clear();
-        after_animation_ = nullptr;
-        waiting_for_click_ = false;
-        on_click_action_ = nullptr;
-        
-        // Сбрасываем спрайт
-        keep_sprite_ = false;
-        sprite_needs_update_ = true;  // <-- ДОБАВЬТЕ
-        if (character_sprite_) {
-            delete character_sprite_;
-            character_sprite_ = nullptr;
-        }
-        if (scaled_character_cache_) {
-            delete scaled_character_cache_;
-            scaled_character_cache_ = nullptr;
-        }
-        
-        clear_text();
-        start_game();
-    }
     
-    void set_volume(int volume) {
-        std::wstring cmd = L"setaudio textsnd volume to " + std::to_wstring(volume);
-        mciSendStringW(cmd.c_str(), nullptr, 0, nullptr);
-    }
-
     bool IsWaitingForClick() const { return waiting_for_click_; }
-    RECT GetTextAreaRect() const {
-        return text_area_.rect;
-    }
+    RECT GetTextAreaRect() const { return text_area_.rect; }
     
-    bool IsPointInTextArea(int x, int y) const {
-        return (x >= text_area_.rect.left && x <= text_area_.rect.right &&
-                y >= text_area_.rect.top && y <= text_area_.rect.bottom);
-    }
-
     void OnTextAreaClick() {
-        OutputDebugStringW(L"OnTextAreaClick вызван");
-        
         if (waiting_for_click_ && on_click_action_) {
-            OutputDebugStringW(L"Выполняем действие после клика");
             waiting_for_click_ = false;
             auto action = on_click_action_;
             on_click_action_ = nullptr;
-            
-            // Выполняем действие напрямую, без PostMessage
             action();
             return;
         }
-        
-        OutputDebugStringW(L"Нет ожидания клика или действия");
     }
     
     void WaitForClick(std::function<void()> after) {
         waiting_for_click_ = true;
         on_click_action_ = after;
-        
-        // Отладочное сообщение
-        OutputDebugStringW(L"WaitForClick: ожидание клика");
-        
         RECT dirty = dialogue_dirty_rect();
         InvalidateRect(hwnd_, &dirty, FALSE);
     }
@@ -626,29 +573,19 @@ explicit VisualNovelApp(HWND hwnd)
     
     void on_command(WORD id) {
         if (id == IDC_EXIT) {
-            ShowLoadingScreen();
             g_appState = STATE_MENU;
-            ShowWindow(hwnd_, SW_HIDE);
-            if (g_mainHwnd) {
-                ShowWindow(g_mainHwnd, SW_SHOW);
-            }
-            HideLoadingScreen();
+            InvalidateRect(hwnd_, nullptr, TRUE);
             return;
         }
     
         if (id >= IDC_CHOICE1 && id <= IDC_CHOICE4) {
             int idx = id - IDC_CHOICE1;
-            
             if (idx >= 0 && idx < static_cast<int>(current_choices_.size())) {
-                // Отладочный вывод
-                OutputDebugStringW((L"Выбран вариант " + std::to_wstring(idx + 1)).c_str());
-                
                 disable_choices();
                 auto cb = current_choices_[idx].action;
                 if (cb) {
                     cb();
                 }
-                // ВАЖНО: возвращаемся, чтобы не выполнять другой код
                 return;
             }
         }
@@ -659,11 +596,13 @@ explicit VisualNovelApp(HWND hwnd)
         animate_text_step();
     }
     
-    private:
+private:
     HWND hwnd_;
     HWND choice_btns_[4]{};
     HWND exit_btn_{};
     HFONT ui_font_{};
+
+    bool game_initialized_ = false;
 
     std::vector<Image*> images_;
     Image* bg_room_{};
@@ -697,13 +636,11 @@ explicit VisualNovelApp(HWND hwnd)
     std::vector<Choice> current_choices_;
     std::function<void()> after_animation_;
     
-    // Для клика по тексту
     ClickableArea text_area_;
     bool waiting_for_click_ = false;
     std::function<void()> on_click_action_;
     static constexpr int BLINK_INTERVAL_MS = 300;
     
-    // Для спрайта персонажа
     Image* character_sprite_{nullptr};
     Bitmap* scaled_character_cache_{nullptr};
     bool keep_sprite_{false};
@@ -711,15 +648,12 @@ explicit VisualNovelApp(HWND hwnd)
     bool sound_enabled_{true};
     bool sprite_needs_update_{true};
     
-    // КЭШ СПРАЙТОВ - ДОБАВЬТЕ ЭТУ СТРОКУ
     std::map<std::wstring, Image*> sprite_cache_;
     
-    // Для загрузки сцен
     SceneDataBase scene_data_;
     std::wstring next_scene_;
     
     void load_images() {
-        // Загружаем фоновые изображения
         bg_room_ = load_one(L"backgrounds\\room.jpg");
         bg_corridor_ = load_one(L"backgrounds\\corridor.jpg");
         bg_kitchen_ = load_one(L"backgrounds\\kitchen.jpg");
@@ -727,13 +661,9 @@ explicit VisualNovelApp(HWND hwnd)
         bg_basement_ = load_one(L"backgrounds\\basement.jpg");
         bg_ending_ = load_one(L"backgrounds\\ending_good.jpg");
         
-        // Если хорошая концовка не загрузилась, пробуем альтернативное имя
         if (!bg_ending_) {
             bg_ending_ = load_one(L"backgrounds\\edning_good.jpg");
         }
-        
-        // Если какие-то фоны не загрузились, это не критично
-        // Игра будет работать с черным фоном
     }
     
     Image* load_one(const wchar_t* path) {
@@ -747,7 +677,6 @@ explicit VisualNovelApp(HWND hwnd)
     }
     
     void preload_sprites() {
-        // Список всех спрайтов, которые могут понадобиться
         std::vector<std::wstring> sprites = {
             L"luis.png",
             L"mom.png",
@@ -760,32 +689,14 @@ explicit VisualNovelApp(HWND hwnd)
                 Image* img = new Image(sprite_path.c_str());
                 if (img->GetLastStatus() == Ok) {
                     sprite_cache_[sprite_name] = img;
-                    images_.push_back(img); // Добавляем в список для очистки
+                    images_.push_back(img);
                 } else {
                     delete img;
                 }
             }
         }
     }
-
-    void preload_scaled_sprites() {
-        // Опционально: можно предварительно создать масштабированные версии
-        // для всех спрайтов, чтобы при смене не было задержки
-        for (auto& pair : sprite_cache_) {
-            int sprite_width = 200;
-            int sprite_height = 280;
-            
-            Bitmap* scaled = new Bitmap(sprite_width, sprite_height, PixelFormat32bppARGB);
-            Graphics g(scaled);
-            g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-            g.DrawImage(pair.second, 0, 0, sprite_width, sprite_height);
-            
-            // Сохраняем в отдельный кэш или заменяем оригинал
-            // Но нужно учитывать, что разные сцены могут требовать разный размер
-            delete scaled; // Пока просто освобождаем
-        }
-    }
-
+    
     void create_controls() {
         ui_font_ = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -825,7 +736,6 @@ explicit VisualNovelApp(HWND hwnd)
     void ensure_scaled_background(int w, int h) {
         if (!current_bg_ || w <= 0 || h <= 0) return;
         
-        // Проверяем, нужно ли пересоздавать кэш
         if (scaled_bg_cache_ && scaled_bg_source_ == current_bg_ && 
             scaled_bg_w_ == w && scaled_bg_h_ == h) {
             return;
@@ -836,7 +746,6 @@ explicit VisualNovelApp(HWND hwnd)
             scaled_bg_cache_ = nullptr;
         }
         
-        // Используем более быстрый метод масштабирования
         scaled_bg_cache_ = new Bitmap(w, h, PixelFormat32bppARGB);
         Graphics bg_g(scaled_bg_cache_);
         bg_g.SetInterpolationMode(InterpolationModeHighQualityBilinear);
@@ -856,11 +765,8 @@ explicit VisualNovelApp(HWND hwnd)
         if (ch == L' ' || ch == L'\r' || ch == L'\n' || ch == L'\t') return;
         
         sound_counter_++;
-        // Каждый 2-й символ
         if ((sound_counter_ % 7) != 0) return;
         
-        // PlaySound с SND_ASYNC запускает звук асинхронно
-        // Если вызвать снова, предыдущий звук остановится автоматически
         static bool soundLoaded = false;
         static std::vector<BYTE> soundBuffer;
         
@@ -879,10 +785,8 @@ explicit VisualNovelApp(HWND hwnd)
         }
         
         if (soundLoaded && !soundBuffer.empty()) {
-            // PlaySound автоматически останавливает предыдущий звук при новом вызове
             PlaySoundW((LPCWSTR)soundBuffer.data(), NULL, SND_MEMORY | SND_ASYNC);
         } else {
-            // Fallback
             Beep(850, 20);
         }
     }
@@ -905,7 +809,6 @@ explicit VisualNovelApp(HWND hwnd)
     
     void set_text_box(const std::wstring& text) {
         shown_text_ = text;
-        // Обновляем только область диалога
         RECT dirty = dialogue_dirty_rect();
         InvalidateRect(hwnd_, &dirty, FALSE);
     }
@@ -919,7 +822,6 @@ explicit VisualNovelApp(HWND hwnd)
         keep_sprite_ = keep;
         current_sprite_path_ = sprite_filename;
         
-        // Берем спрайт из кэша
         auto it = sprite_cache_.find(sprite_filename);
         if (it != sprite_cache_.end()) {
             character_sprite_ = it->second;
@@ -927,7 +829,6 @@ explicit VisualNovelApp(HWND hwnd)
             character_sprite_ = nullptr;
         }
         
-        // Очищаем кэш масштабированного спрайта
         if (scaled_character_cache_) {
             delete scaled_character_cache_;
             scaled_character_cache_ = nullptr;
@@ -936,7 +837,7 @@ explicit VisualNovelApp(HWND hwnd)
         sprite_needs_update_ = true;
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
-
+    
     void set_character_sprite_by_name(const std::wstring& character_name, bool keep = false) {
         std::wstring sprite_filename;
         
@@ -957,138 +858,103 @@ explicit VisualNovelApp(HWND hwnd)
         set_character_sprite(sprite_filename, keep);
     }
     
-void hide_character_sprite() {
-    character_sprite_ = nullptr;
-    // НЕ удаляем спрайт, просто убираем ссылку
-    // Спрайты остаются в кэше
-    sprite_needs_update_ = true;
-    InvalidateRect(hwnd_, nullptr, FALSE);
-}
-
+    void hide_character_sprite() {
+        character_sprite_ = nullptr;
+        sprite_needs_update_ = true;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+    
     void animate_text(const std::wstring& text, 
         std::function<void()> after = nullptr, 
         const std::wstring& speaker = L"Нарратор", 
         bool has_choices = false) {
-KillTimer(hwnd_, 1);
-disable_choices();
-waiting_for_click_ = false;
-on_click_action_ = nullptr;
-
-sound_counter_ = 0;
-
-// Если после анимации НЕТ выборов, ждем клик
-if (!has_choices && after) {
-auto final_action = after;
-after = [this, final_action]() { 
-  WaitForClick(final_action); 
-};
-}
-
-current_speaker_ = speaker;
-current_text_ = text + L"\r\n";
-shown_text_.clear();
-sound_counter_ = 0;
-text_index_ = 0;
-after_animation_ = std::move(after);
-set_text_box(L"");
-SetTimer(hwnd_, 1, speed_ms_, nullptr);
-}
-    
-void animate_text_step() {
-    if (text_index_ < current_text_.size()) {
-        int remaining = static_cast<int>(current_text_.size() - text_index_);
-        int chunk = std::min(chars_per_tick_, remaining);
-        for (int i = 0; i < chunk; ++i) {
-            wchar_t ch = current_text_[text_index_ + static_cast<size_t>(i)];
-            shown_text_.push_back(ch);
-            play_type_sound(ch);
+        KillTimer(hwnd_, 1);
+        disable_choices();
+        waiting_for_click_ = false;
+        on_click_action_ = nullptr;
+        
+        sound_counter_ = 0;
+        
+        if (!has_choices && after) {
+            auto final_action = after;
+            after = [this, final_action]() { 
+                WaitForClick(final_action); 
+            };
         }
-        text_index_ += static_cast<size_t>(chunk);
-        set_text_box(shown_text_);
-        return;
-    }
-    
-    KillTimer(hwnd_, 1);
-    
-    OutputDebugStringW(L"Анимация завершена");
-    
-    if (after_animation_) {
-        OutputDebugStringW(L"Вызов after_animation_");
-        auto cb = after_animation_;
-        after_animation_ = nullptr;
-        cb();
-    } else {
-        OutputDebugStringW(L"after_animation_ пуст");
-    }
-}
-    
-void set_choices(const std::vector<Choice>& choices) {
-    current_choices_ = choices;
-    
-    RECT rc;
-    GetClientRect(hwnd_, &rc);
-    
-    // Параметры текстовой области
-    int panel_x = 24;
-    int panel_y = rc.bottom - 285;
-    int panel_w = rc.right - 48;
-    
-    // Параметры кнопок
-    int btn_h = 45;
-    int btn_w = static_cast<int>(panel_w * 0.6);
-    int btn_spacing = 10;
-    
-    // Центрируем кнопки
-    int btn_x = panel_x + (panel_w - btn_w) / 2;
-    int choice_y = panel_y - 20;
-    
-    // Сначала скрываем все кнопки
-    for (int i = 0; i < 4; ++i) {
-        ShowWindow(choice_btns_[i], SW_HIDE);
-        EnableWindow(choice_btns_[i], FALSE);
-    }
-    
-    // Показываем только нужные кнопки
-    for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
-        std::wstring label = std::to_wstring(i + 1) + L". " + choices[i].text;
-        SetWindowTextW(choice_btns_[i], label.c_str());
         
-        int btn_y = choice_y - (choices.size() - i) * (btn_h + btn_spacing);
-        
-        MoveWindow(choice_btns_[i], btn_x, btn_y, btn_w, btn_h, TRUE);
-        ShowWindow(choice_btns_[i], SW_SHOW);
-        EnableWindow(choice_btns_[i], TRUE);
-        InvalidateRect(choice_btns_[i], nullptr, TRUE);
+        current_speaker_ = speaker;
+        current_text_ = text + L"\r\n";
+        shown_text_.clear();
+        text_index_ = 0;
+        after_animation_ = std::move(after);
+        set_text_box(L"");
+        SetTimer(hwnd_, 1, speed_ms_, nullptr);
     }
-}
     
-void disable_choices() {
-    for (auto* btn : choice_btns_) {
-        EnableWindow(btn, FALSE);
-        ShowWindow(btn, SW_HIDE);
-    }
-    current_choices_.clear();
-    
-    // Сбрасываем ожидание клика
-    waiting_for_click_ = false;
-    on_click_action_ = nullptr;
-    
-    // НЕ вызываем здесь play_scene или другие переходы
-}
-    
-    void start_game() {
-        previous_choice_.clear();
-        has_key_ = false;
-        clear_text();
-        
-        scene_data_.Initialize();
-        
-        if (scene_data_.scenes.empty()) {
-            MessageBoxW(hwnd_, L"Не удалось загрузить сцены!", L"Ошибка", MB_OK);
+    void animate_text_step() {
+        if (text_index_ < current_text_.size()) {
+            int remaining = static_cast<int>(current_text_.size() - text_index_);
+            int chunk = std::min(chars_per_tick_, remaining);
+            for (int i = 0; i < chunk; ++i) {
+                wchar_t ch = current_text_[text_index_ + static_cast<size_t>(i)];
+                shown_text_.push_back(ch);
+                play_type_sound(ch);
+            }
+            text_index_ += static_cast<size_t>(chunk);
+            set_text_box(shown_text_);
             return;
         }
         
-        play_scene(L"scene_32");
+        KillTimer(hwnd_, 1);
+        
+        if (after_animation_) {
+            auto cb = after_animation_;
+            after_animation_ = nullptr;
+            cb();
+        }
+    }
+    
+    void set_choices(const std::vector<Choice>& choices) {
+        current_choices_ = choices;
+        
+        RECT rc;
+        GetClientRect(hwnd_, &rc);
+        
+        int panel_x = 24;
+        int panel_y = rc.bottom - 285;
+        int panel_w = rc.right - 48;
+        int btn_h = 45;
+        int btn_w = static_cast<int>(panel_w * 0.6);
+        int btn_spacing = 10;
+        int btn_x = panel_x + (panel_w - btn_w) / 2;
+        int choice_y = panel_y - 20;
+        
+        for (int i = 0; i < 4; ++i) {
+            ShowWindow(choice_btns_[i], SW_HIDE);
+            EnableWindow(choice_btns_[i], FALSE);
+        }
+        
+        for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+            std::wstring label = std::to_wstring(i + 1) + L". " + choices[i].text;
+            SetWindowTextW(choice_btns_[i], label.c_str());
+            
+            int btn_y = choice_y - (choices.size() - i) * (btn_h + btn_spacing);
+            
+            MoveWindow(choice_btns_[i], btn_x, btn_y, btn_w, btn_h, TRUE);
+            ShowWindow(choice_btns_[i], SW_SHOW);
+            EnableWindow(choice_btns_[i], TRUE);
+            InvalidateRect(choice_btns_[i], nullptr, TRUE);
+        }
+    }
+    
+    void disable_choices() {
+        for (auto* btn : choice_btns_) {
+            EnableWindow(btn, FALSE);
+            ShowWindow(btn, SW_HIDE);
+        }
+        current_choices_.clear();
+        waiting_for_click_ = false;
+        on_click_action_ = nullptr;
     }
     
     void play_scene(const std::wstring& scene_name) {
@@ -1100,7 +966,6 @@ void disable_choices() {
         
         SceneNode& scene = it->second;
         
-        // Устанавливаем фон и спрайт
         if (!scene.background_name.empty()) {
             set_background_by_name(scene.background_name);
         }
@@ -1111,11 +976,9 @@ void disable_choices() {
             hide_character_sprite();
         }
         
-        // Получаем следующую сцену из связей
         std::wstring next_scene = scene_data_.GetNextScene(scene_name);
         
         if (scene.has_choices && !scene.choices.empty()) {
-            // Сцена с выбором - показываем текст и потом кнопки
             animate_text(
                 scene.text,
                 [this, scene]() {
@@ -1128,7 +991,6 @@ void disable_choices() {
                             choices.push_back({
                                 scene.choices[i].first,
                                 [this, target_scene]() { 
-                                    // При выборе переходим в целевую сцену
                                     play_scene(target_scene); 
                                 }
                             });
@@ -1140,7 +1002,6 @@ void disable_choices() {
                 true
             );
         } else {
-            // Обычная сцена
             std::function<void()> next_action = nullptr;
             if (!next_scene.empty()) {
                 next_action = [this, next_scene]() { 
@@ -1156,494 +1017,426 @@ void disable_choices() {
             );
         }
     }
-    
-    void show_choice_text(const SceneData& scene) {
-        // Устанавливаем фон
-        if (!scene.background_name.empty()) {
-            set_background_by_name(scene.background_name);
-        }
-        
-        // Устанавливаем спрайт
-        if (scene.has_sprite && !scene.sprite_name.empty()) {
-            set_character_sprite_by_name(scene.sprite_name, true);
-        } else {
-            hide_character_sprite();
-        }
-        
-        // Сбрасываем счетчик звука при начале текста выбора
-        sound_counter_ = 0;
-        
-        animate_text(
-            scene.text,
-            [this]() {
-                // После показа текста выбора
-            },
-            L"",
-            false
-        );
-    }
-    
-    void show_ending(const std::wstring& ending_type) {
-        set_background(bg_ending_);
-        std::wstring t = L"\r\n==================================================\r\n";
-        if (ending_type == L"good_ending") {
-            t += L"         ХОРОШАЯ КОНЦОВКА\r\n";
-            t += L"==================================================\r\n\r\n";
-            t += L"Вы разгадали тайну усадьбы и обрели свободу!\r\n";
-        } else if (ending_type == L"neutral_ending") {
-            t += L"         НЕЙТРАЛЬНАЯ КОНЦОВКА\r\n";
-            t += L"==================================================\r\n\r\n";
-            t += L"Вы выбрались из усадьбы, но не разгадали ее тайну.\r\n";
-        } else {
-            t += L"         ПЛОХАЯ КОНЦОВКА\r\n";
-            t += L"==================================================\r\n\r\n";
-            t += L"Вы стали частью усадьбы навсегда.\r\n";
-        }
-        animate_text(t, nullptr, L"Нарратор", false);
-    }
 };
 
 // ==================== ГЛАВНОЕ МЕНЮ ====================
 class MainMenu {
-    public:
-        MainMenu(HWND hwnd) : hwnd_(hwnd), g_gameWindow(nullptr), show_settings_(false) {
-            create_controls();
-        }
-    
-        ~MainMenu() {
-            if (title_font_) DeleteObject(title_font_);
-            if (button_font_) DeleteObject(button_font_);
-            if (settings_font_) DeleteObject(settings_font_);
-        }
-    
-        void on_paint(HDC hdc) {
-            RECT rc;
-            GetClientRect(hwnd_, &rc);
-            
-            HDC memdc = CreateCompatibleDC(hdc);
-            HBITMAP back = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
-            HGDIOBJ old = SelectObject(memdc, back);
-            
-            // Градиентный фон
-            for (int y = 0; y < rc.bottom; y++) {
-                COLORREF color = RGB(
-                    20 + (y * 15 / rc.bottom),
-                    15 + (y * 10 / rc.bottom),
-                    35 + (y * 20 / rc.bottom)
-                );
-                HPEN pen = CreatePen(PS_SOLID, 1, color);
-                HBRUSH brush = CreateSolidBrush(color);
-                SelectObject(memdc, pen);
-                SelectObject(memdc, brush);
-                Rectangle(memdc, 0, y, rc.right, y + 1);
-                DeleteObject(pen);
-                DeleteObject(brush);
-            }
-            
-            // Декоративные круги
-            HPEN goldPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
-            HBRUSH oldBrush = (HBRUSH)SelectObject(memdc, GetStockObject(NULL_BRUSH));
-            
-            for (int i = 0; i < 3; i++) {
-                SelectObject(memdc, goldPen);
-                Ellipse(memdc, 50 + i * 150, 50, 150 + i * 150, 150);
-                Ellipse(memdc, rc.right - 150 - i * 150, rc.bottom - 150, rc.right - 50 - i * 150, rc.bottom - 50);
-            }
-            
-            SelectObject(memdc, oldBrush);
-            DeleteObject(goldPen);
-            
-            SetBkMode(memdc, TRANSPARENT);
-            
-            // Заголовок
-            HFONT oldFont = (HFONT)SelectObject(memdc, title_font_);
-            RECT titleRect = {0, rc.bottom / 4 - 60, rc.right, rc.bottom / 4};
-            SetTextColor(memdc, RGB(255, 215, 0));
-            DrawTextW(memdc, L"Майами: уроки свободы", -1, &titleRect, DT_CENTER | DT_SINGLELINE);
-            
-            // Если настройки открыты, рисуем их сверху
-            if (show_settings_) {
-                // Полупрозрачный фон для настроек
-                RECT settingsRect = {rc.right / 2 - 200, rc.bottom / 6 - 60, rc.right / 2 + 200, rc.bottom / 6 + 200};
-                HBRUSH darkBrush = CreateSolidBrush(RGB(30, 30, 45));
-                FillRect(memdc, &settingsRect, darkBrush);
-                DeleteObject(darkBrush);
-                
-                // Рамка
-                HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
-                SelectObject(memdc, borderPen);
-                Rectangle(memdc, settingsRect.left, settingsRect.top, settingsRect.right, settingsRect.bottom);
-                DeleteObject(borderPen);
-                
-                // Заголовок настроек
-                SelectObject(memdc, settings_font_);
-                RECT settingsTitleRect = settingsRect;
-                settingsTitleRect.top += 10;
-                settingsTitleRect.bottom = settingsTitleRect.top + 35;
-                SetTextColor(memdc, RGB(255, 215, 0));
-                DrawTextW(memdc, L"Настройки звука", -1, &settingsTitleRect, DT_CENTER | DT_SINGLELINE);
-                
-                // Громкость
-                SelectObject(memdc, settings_font_);
-                SetTextColor(memdc, RGB(200, 200, 220));
-                RECT volTextRect = {settingsRect.left + 20, settingsRect.top + 55, settingsRect.right - 100, settingsRect.top + 85};
-                DrawTextW(memdc, L"Громкость:", -1, &volTextRect, DT_LEFT | DT_SINGLELINE);
-                
-                // Текущая громкость
-                wchar_t volText[32];
-                wsprintfW(volText, L"%d%%", g_settings.volume);
-                RECT volValueRect = {settingsRect.left + 130, settingsRect.top + 55, settingsRect.right - 50, settingsRect.top + 85};
-                DrawTextW(memdc, volText, -1, &volValueRect, DT_LEFT | DT_SINGLELINE);
-                
-                // Звук
-                RECT soundTextRect = {settingsRect.left + 20, settingsRect.top + 95, settingsRect.right - 100, settingsRect.top + 125};
-                DrawTextW(memdc, g_settings.sound_enabled ? L"Звук: Включен" : L"Звук: Выключен", -1, &soundTextRect, DT_LEFT | DT_SINGLELINE);
-            }
-            
-            SelectObject(memdc, button_font_);
-            SetTextColor(memdc, RGB(200, 200, 220));
-            
-            BitBlt(hdc, 0, 0, rc.right, rc.bottom, memdc, 0, 0, SRCCOPY);
-            SelectObject(memdc, oldFont);
-            DeleteObject(back);
-            DeleteDC(memdc);
-        }
-    
-        void on_command(WORD id) {
-            if (id == IDC_START_GAME) {
-                ShowLoadingScreen();
-                g_appState = STATE_GAME;
-                ShowWindow(hwnd_, SW_HIDE);
-                
-                if (g_gameApp && g_gameWindow) {
-                    g_gameApp->reset_game();
-                    HideLoadingScreen();
-                    ShowWindow(g_gameWindow, SW_SHOW);
-                    SetForegroundWindow(g_gameWindow);
-                } else {
-                    HINSTANCE hInst = GetModuleHandleW(nullptr);
-                    g_gameWindow = CreateWindowExW(
-                        WS_EX_TOPMOST, L"GameWindowClass", L"Майами: уроки свободы",
-                        WS_POPUP | WS_VISIBLE, 0, 0,
-                        1600, 900,
-                        nullptr, nullptr, hInst, nullptr);
-                    
-                    if (g_gameWindow) {
-                        g_gameApp = new VisualNovelApp(g_gameWindow);
-                        SetWindowLongPtrW(g_gameWindow, GWLP_USERDATA, (LONG_PTR)g_gameApp);
-                        HideLoadingScreen();
-                        ShowWindow(g_gameWindow, SW_SHOW);
-                        UpdateWindow(g_gameWindow);
-                    } else {
-                        HideLoadingScreen();
-                    }
-                }
-            }
-            else if (id == IDC_SETTINGS) {
-                show_settings_ = !show_settings_;
-                // Показываем/скрываем кнопки настроек
-                ShowWindow(vol_down_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
-                ShowWindow(vol_up_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
-                ShowWindow(sound_toggle_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
-                ShowWindow(close_settings_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
-                InvalidateRect(hwnd_, nullptr, TRUE);
-            }
-            else if (id == IDC_VOLUME_UP) {
-                change_volume(10);
-            }
-            else if (id == IDC_VOLUME_DOWN) {
-                change_volume(-10);
-            }
-            else if (id == IDC_SOUND_TOGGLE) {
-                g_settings.sound_enabled = !g_settings.sound_enabled;
-                if (g_gameApp) {
-                    g_gameApp->set_sound_enabled(g_settings.sound_enabled);
-                }
-                InvalidateRect(hwnd_, nullptr, TRUE);
-            }
-            else if (id == IDC_CLOSE_SETTINGS) {
-                show_settings_ = false;
-                ShowWindow(vol_down_btn_, SW_HIDE);
-                ShowWindow(vol_up_btn_, SW_HIDE);
-                ShowWindow(sound_toggle_btn_, SW_HIDE);
-                ShowWindow(close_settings_btn_, SW_HIDE);
-                InvalidateRect(hwnd_, nullptr, TRUE);
-            }
-            else if (id == IDC_EXIT_GAME) {
-                PostQuitMessage(0);
-            }
-        }
-    
-        void on_resize() {
-            RECT rc;
-            GetClientRect(hwnd_, &rc);
-            int centerX = rc.right / 2;
-            
-            // Основные кнопки (в центре)
-            MoveWindow(start_btn_, centerX - 150, rc.bottom / 2 - 40, 300, 50, TRUE);
-            MoveWindow(settings_btn_, centerX - 150, rc.bottom / 2 + 30, 300, 50, TRUE);
-            MoveWindow(exit_btn_, centerX - 150, rc.bottom / 2 + 100, 300, 50, TRUE);
-            
-            // Кнопки настроек (сверху)
-            int settingsY = rc.bottom / 6 - 20;
-            int settingsCenterX = rc.right / 2;
-            
-            // Кнопки для громкости
-            MoveWindow(vol_down_btn_, settingsCenterX - 20, settingsY + 10, 40, 35, TRUE);
-            MoveWindow(vol_up_btn_, settingsCenterX + 60, settingsY + 10, 40, 35, TRUE);
-            
-            // Кнопка переключения звука
-            MoveWindow(sound_toggle_btn_, settingsCenterX - 190, settingsY + 95, 200, 35, TRUE);
-            
-            // Кнопка закрытия
-            MoveWindow(close_settings_btn_, settingsCenterX - 75, settingsY + 170, 150, 35, TRUE);
-        }
-    
-    private:
-        HWND hwnd_;
-        HWND start_btn_;
-        HWND settings_btn_;
-        HWND exit_btn_;
-        HWND g_gameWindow;
-        HFONT title_font_;
-        HFONT button_font_;
-        HFONT settings_font_;
-        bool show_settings_;
-        
-        // Кнопки настроек
-        HWND vol_down_btn_;
-        HWND vol_up_btn_;
-        HWND sound_toggle_btn_;
-        HWND close_settings_btn_;
-        
-        static constexpr int IDC_START_GAME = 2001;
-        static constexpr int IDC_SETTINGS = 2002;
-        static constexpr int IDC_EXIT_GAME = 2003;
-        static constexpr int IDC_VOLUME_UP = 2006;
-        static constexpr int IDC_VOLUME_DOWN = 2007;
-        static constexpr int IDC_SOUND_TOGGLE = 2008;
-        static constexpr int IDC_CLOSE_SETTINGS = 2009;
-    
-        void create_controls() {
-            title_font_ = CreateFontW(-48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
-            
-            button_font_ = CreateFontW(-24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
-            
-            settings_font_ = CreateFontW(-18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-            
-            start_btn_ = CreateWindowW(L"BUTTON", L"Начать игру", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                0, 0, 300, 50, hwnd_, (HMENU)IDC_START_GAME, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(start_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-            
-            settings_btn_ = CreateWindowW(L"BUTTON", L"Настройки", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                0, 0, 300, 50, hwnd_, (HMENU)IDC_SETTINGS, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(settings_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-            
-            exit_btn_ = CreateWindowW(L"BUTTON", L"Выход", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                0, 0, 300, 50, hwnd_, (HMENU)IDC_EXIT_GAME, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(exit_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
-            
-            // Кнопки настроек (изначально скрыты)
-            vol_down_btn_ = CreateWindowW(L"BUTTON", L"◀", WS_CHILD | BS_PUSHBUTTON,
-                0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_DOWN, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(vol_down_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
-            ShowWindow(vol_down_btn_, SW_HIDE);
-            
-            vol_up_btn_ = CreateWindowW(L"BUTTON", L"▶", WS_CHILD | BS_PUSHBUTTON,
-                0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_UP, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(vol_up_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
-            ShowWindow(vol_up_btn_, SW_HIDE);
-            
-            sound_toggle_btn_ = CreateWindowW(L"BUTTON", L"Вкл/Выкл звук", WS_CHILD | BS_PUSHBUTTON,
-                0, 0, 200, 35, hwnd_, (HMENU)IDC_SOUND_TOGGLE, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(sound_toggle_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
-            ShowWindow(sound_toggle_btn_, SW_HIDE);
-            
-            close_settings_btn_ = CreateWindowW(L"BUTTON", L"Закрыть", WS_CHILD | BS_PUSHBUTTON,
-                0, 0, 150, 35, hwnd_, (HMENU)IDC_CLOSE_SETTINGS, GetModuleHandleW(nullptr), nullptr);
-            SendMessageW(close_settings_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
-            ShowWindow(close_settings_btn_, SW_HIDE);
-            
-            on_resize();
-        }
-        
-        void change_volume(int delta) {
-            int new_volume = g_settings.volume + delta;
-            if (new_volume >= 0 && new_volume <= 100) {
-                g_settings.volume = new_volume;
-                InvalidateRect(hwnd_, nullptr, TRUE);
-            }
-        }
-    };
-
-// ==================== ОБРАБОТЧИКИ ОКОН ====================
-LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static MainMenu* menu = nullptr;
-    switch (msg) {
-    case WM_CREATE: menu = new MainMenu(hwnd); SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)menu); return 0;
-    case WM_SIZE: if (menu) menu->on_resize(); return 0;
-    case WM_COMMAND: if (menu) menu->on_command(LOWORD(wParam)); return 0;
-    case WM_PAINT: { PAINTSTRUCT ps; HDC hdc = BeginPaint(hwnd, &ps); if (menu) menu->on_paint(hdc); EndPaint(hwnd, &ps); return 0; }
-    case WM_ERASEBKGND: return 1;
-    case WM_DESTROY: delete menu; ChangeDisplaySettings(nullptr, 0); PostQuitMessage(0); return 0;
+public:
+    MainMenu(HWND hwnd) : hwnd_(hwnd), show_settings_(false) {
+        create_controls();
     }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
+    
+    ~MainMenu() {
+        if (title_font_) DeleteObject(title_font_);
+        if (button_font_) DeleteObject(button_font_);
+        if (settings_font_) DeleteObject(settings_font_);
+    }
+    
+    void on_paint(HDC hdc) {
+        RECT rc;
+        GetClientRect(hwnd_, &rc);
+        
+        HDC memdc = CreateCompatibleDC(hdc);
+        HBITMAP back = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+        HGDIOBJ old = SelectObject(memdc, back);
+        
+        for (int y = 0; y < rc.bottom; y++) {
+            COLORREF color = RGB(
+                20 + (y * 15 / rc.bottom),
+                15 + (y * 10 / rc.bottom),
+                35 + (y * 20 / rc.bottom)
+            );
+            HPEN pen = CreatePen(PS_SOLID, 1, color);
+            HBRUSH brush = CreateSolidBrush(color);
+            SelectObject(memdc, pen);
+            SelectObject(memdc, brush);
+            Rectangle(memdc, 0, y, rc.right, y + 1);
+            DeleteObject(pen);
+            DeleteObject(brush);
+        }
+        
+        HPEN goldPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
+        HBRUSH oldBrush = (HBRUSH)SelectObject(memdc, GetStockObject(NULL_BRUSH));
+        
+        for (int i = 0; i < 3; i++) {
+            SelectObject(memdc, goldPen);
+            Ellipse(memdc, 50 + i * 150, 50, 150 + i * 150, 150);
+            Ellipse(memdc, rc.right - 150 - i * 150, rc.bottom - 150, rc.right - 50 - i * 150, rc.bottom - 50);
+        }
+        
+        SelectObject(memdc, oldBrush);
+        DeleteObject(goldPen);
+        
+        SetBkMode(memdc, TRANSPARENT);
+        HFONT oldFont = (HFONT)SelectObject(memdc, title_font_);
+        RECT titleRect = {0, rc.bottom / 4 - 60, rc.right, rc.bottom / 4};
+        SetTextColor(memdc, RGB(255, 215, 0));
+        DrawTextW(memdc, L"Майами: уроки свободы", -1, &titleRect, DT_CENTER | DT_SINGLELINE);
+        
+        if (show_settings_) {
+            RECT settingsRect = {rc.right / 2 - 200, rc.bottom / 6 - 60, rc.right / 2 + 200, rc.bottom / 6 + 200};
+            HBRUSH darkBrush = CreateSolidBrush(RGB(30, 30, 45));
+            FillRect(memdc, &settingsRect, darkBrush);
+            DeleteObject(darkBrush);
+            
+            HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(218, 165, 32));
+            SelectObject(memdc, borderPen);
+            Rectangle(memdc, settingsRect.left, settingsRect.top, settingsRect.right, settingsRect.bottom);
+            DeleteObject(borderPen);
+            
+            SelectObject(memdc, settings_font_);
+            RECT settingsTitleRect = settingsRect;
+            settingsTitleRect.top += 10;
+            settingsTitleRect.bottom = settingsTitleRect.top + 35;
+            SetTextColor(memdc, RGB(255, 215, 0));
+            DrawTextW(memdc, L"Настройки звука", -1, &settingsTitleRect, DT_CENTER | DT_SINGLELINE);
+            
+            SelectObject(memdc, settings_font_);
+            SetTextColor(memdc, RGB(200, 200, 220));
+            RECT volTextRect = {settingsRect.left + 20, settingsRect.top + 55, settingsRect.right - 100, settingsRect.top + 85};
+            DrawTextW(memdc, L"Громкость:", -1, &volTextRect, DT_LEFT | DT_SINGLELINE);
+            
+            wchar_t volText[32];
+            wsprintfW(volText, L"%d%%", g_settings.volume);
+            RECT volValueRect = {settingsRect.left + 130, settingsRect.top + 55, settingsRect.right - 50, settingsRect.top + 85};
+            DrawTextW(memdc, volText, -1, &volValueRect, DT_LEFT | DT_SINGLELINE);
+            
+            RECT soundTextRect = {settingsRect.left + 20, settingsRect.top + 95, settingsRect.right - 100, settingsRect.top + 125};
+            DrawTextW(memdc, g_settings.sound_enabled ? L"Звук: Включен" : L"Звук: Выключен", -1, &soundTextRect, DT_LEFT | DT_SINGLELINE);
+        }
+        
+        SelectObject(memdc, button_font_);
+        SetTextColor(memdc, RGB(200, 200, 220));
+        
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, memdc, 0, 0, SRCCOPY);
+        SelectObject(memdc, oldFont);
+        DeleteObject(back);
+        DeleteDC(memdc);
+    }
+    
+    void show() {
+        ShowWindow(start_btn_, SW_SHOW);
+        ShowWindow(settings_btn_, SW_SHOW);
+        ShowWindow(exit_btn_, SW_SHOW);
+        // Если настройки открыты, показываем их кнопки
+        if (show_settings_) {
+            ShowWindow(vol_down_btn_, SW_SHOW);
+            ShowWindow(vol_up_btn_, SW_SHOW);
+            ShowWindow(sound_toggle_btn_, SW_SHOW);
+            ShowWindow(close_settings_btn_, SW_SHOW);
+        }
+        InvalidateRect(hwnd_, nullptr, TRUE);
+    }
+    
+    void hide() {
+        ShowWindow(start_btn_, SW_HIDE);
+        ShowWindow(settings_btn_, SW_HIDE);
+        ShowWindow(exit_btn_, SW_HIDE);
+        ShowWindow(vol_down_btn_, SW_HIDE);
+        ShowWindow(vol_up_btn_, SW_HIDE);
+        ShowWindow(sound_toggle_btn_, SW_HIDE);
+        ShowWindow(close_settings_btn_, SW_HIDE);
+        show_settings_ = false;
+    }
 
-LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    auto* app = reinterpret_cast<VisualNovelApp*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    void on_command(WORD id) {
+        if (id == IDC_START_GAME) {
+            g_appState = STATE_GAME;
+            if (g_gameApp) {
+                g_gameApp->reset_game();
+            } else {
+                g_gameApp = new VisualNovelApp(hwnd_);
+            }
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+        else if (id == IDC_SETTINGS) {
+            show_settings_ = !show_settings_;
+            ShowWindow(vol_down_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+            ShowWindow(vol_up_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+            ShowWindow(sound_toggle_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+            ShowWindow(close_settings_btn_, show_settings_ ? SW_SHOW : SW_HIDE);
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+        else if (id == IDC_VOLUME_UP) {
+            change_volume(10);
+        }
+        else if (id == IDC_VOLUME_DOWN) {
+            change_volume(-10);
+        }
+        else if (id == IDC_SOUND_TOGGLE) {
+            g_settings.sound_enabled = !g_settings.sound_enabled;
+            if (g_gameApp) {
+                g_gameApp->set_sound_enabled(g_settings.sound_enabled);
+            }
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+        else if (id == IDC_CLOSE_SETTINGS) {
+            show_settings_ = false;
+            ShowWindow(vol_down_btn_, SW_HIDE);
+            ShowWindow(vol_up_btn_, SW_HIDE);
+            ShowWindow(sound_toggle_btn_, SW_HIDE);
+            ShowWindow(close_settings_btn_, SW_HIDE);
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+        else if (id == IDC_EXIT_GAME) {
+            PostQuitMessage(0);
+        }
+    }
+    
+    void on_resize() {
+        RECT rc;
+        GetClientRect(hwnd_, &rc);
+        int centerX = rc.right / 2;
+        
+        MoveWindow(start_btn_, centerX - 150, rc.bottom / 2 - 40, 300, 50, TRUE);
+        MoveWindow(settings_btn_, centerX - 150, rc.bottom / 2 + 30, 300, 50, TRUE);
+        MoveWindow(exit_btn_, centerX - 150, rc.bottom / 2 + 100, 300, 50, TRUE);
+        
+        int settingsY = rc.bottom / 6 - 20;
+        int settingsCenterX = rc.right / 2;
+        
+        MoveWindow(vol_down_btn_, settingsCenterX - 20, settingsY + 10, 40, 35, TRUE);
+        MoveWindow(vol_up_btn_, settingsCenterX + 60, settingsY + 10, 40, 35, TRUE);
+        MoveWindow(sound_toggle_btn_, settingsCenterX - 190, settingsY + 95, 200, 35, TRUE);
+        MoveWindow(close_settings_btn_, settingsCenterX - 75, settingsY + 170, 150, 35, TRUE);
+    }
+    
+private:
+    HWND hwnd_;
+    HWND start_btn_;
+    HWND settings_btn_;
+    HWND exit_btn_;
+    HFONT title_font_;
+    HFONT button_font_;
+    HFONT settings_font_;
+    bool show_settings_;
+    
+    HWND vol_down_btn_;
+    HWND vol_up_btn_;
+    HWND sound_toggle_btn_;
+    HWND close_settings_btn_;
+    
+    void create_controls() {
+        title_font_ = CreateFontW(-48, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+        
+        button_font_ = CreateFontW(-24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+        
+        settings_font_ = CreateFontW(-18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        
+        start_btn_ = CreateWindowW(L"BUTTON", L"Начать игру", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 300, 50, hwnd_, (HMENU)IDC_START_GAME, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(start_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+        
+        settings_btn_ = CreateWindowW(L"BUTTON", L"Настройки", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 300, 50, hwnd_, (HMENU)IDC_SETTINGS, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(settings_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+        
+        exit_btn_ = CreateWindowW(L"BUTTON", L"Выход", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 300, 50, hwnd_, (HMENU)IDC_EXIT_GAME, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(exit_btn_, WM_SETFONT, (WPARAM)button_font_, TRUE);
+        
+        vol_down_btn_ = CreateWindowW(L"BUTTON", L"◀", WS_CHILD | BS_PUSHBUTTON,
+            0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_DOWN, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(vol_down_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+        ShowWindow(vol_down_btn_, SW_HIDE);
+        
+        vol_up_btn_ = CreateWindowW(L"BUTTON", L"▶", WS_CHILD | BS_PUSHBUTTON,
+            0, 0, 40, 35, hwnd_, (HMENU)IDC_VOLUME_UP, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(vol_up_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+        ShowWindow(vol_up_btn_, SW_HIDE);
+        
+        sound_toggle_btn_ = CreateWindowW(L"BUTTON", L"Вкл/Выкл звук", WS_CHILD | BS_PUSHBUTTON,
+            0, 0, 200, 35, hwnd_, (HMENU)IDC_SOUND_TOGGLE, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(sound_toggle_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+        ShowWindow(sound_toggle_btn_, SW_HIDE);
+        
+        close_settings_btn_ = CreateWindowW(L"BUTTON", L"Закрыть", WS_CHILD | BS_PUSHBUTTON,
+            0, 0, 150, 35, hwnd_, (HMENU)IDC_CLOSE_SETTINGS, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(close_settings_btn_, WM_SETFONT, (WPARAM)settings_font_, TRUE);
+        ShowWindow(close_settings_btn_, SW_HIDE);
+        
+        on_resize();
+    }
+    
+    void change_volume(int delta) {
+        int new_volume = g_settings.volume + delta;
+        if (new_volume >= 0 && new_volume <= 100) {
+            g_settings.volume = new_volume;
+            InvalidateRect(hwnd_, nullptr, TRUE);
+        }
+    }
+};
+
+// ==================== ОБРАБОТЧИК ГЛАВНОГО ОКНА ====================
+LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    static MainMenu* menu = nullptr;
     static HBRUSH darkBrush = CreateSolidBrush(RGB(24, 26, 40));
-
+    
     switch (msg) {
-        case WM_CREATE:
-            return 0;
-            
-        case WM_SIZE:
-            if (app) app->on_resize();
-            return 0;
-            
-        case WM_COMMAND:
-            if (app) app->on_command(LOWORD(wParam));
-            return 0;
-            
-        case WM_TIMER:
-            if (app) app->on_timer(wParam);
-            return 0;
-            
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            if (app) app->on_paint(hdc);
-            EndPaint(hwnd, &ps);
-            return 0;
-        }
+    case WM_CREATE: {
+        menu = new MainMenu(hwnd);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)menu);
         
-        case WM_ERASEBKGND:
-            return 1;
+        g_screenWidth = GetSystemMetrics(SM_CXSCREEN);
+        g_screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, g_screenWidth, g_screenHeight, SWP_SHOWWINDOW);
+        return 0;
+    }
+    case WM_SIZE:
+        if (menu) menu->on_resize();
+        if (g_gameApp) g_gameApp->on_resize();
+        return 0;
+        case WM_COMMAND: {
+            WORD id = LOWORD(wParam);
             
-        case WM_LBUTTONDOWN: {
-            if (app) {
-                static DWORD lastClickTime = 0;
-                DWORD currentTime = GetTickCount();
-                if (currentTime - lastClickTime < 200) return 0;
-                lastClickTime = currentTime;
-                
-                if (app->IsWaitingForClick()) {
-                    POINT pt;
-                    pt.x = LOWORD(lParam);
-                    pt.y = HIWORD(lParam);
-                    RECT textRect = app->GetTextAreaRect();
-                    if (PtInRect(&textRect, pt)) {
-                        app->OnTextAreaClick();
+            if (g_appState == STATE_MENU && menu) {
+                if (id == IDC_START_GAME) {
+                    // Скрываем меню
+                    menu->hide();
+                    
+                    // Создаем игру если еще не создана
+                    if (!g_gameApp) {
+                        g_gameApp = new VisualNovelApp(hwnd);
                     }
+                    
+                    // Показываем игру (инициализация произойдет в show())
+                    g_gameApp->show();
+                    g_appState = STATE_GAME;
+                    InvalidateRect(hwnd, nullptr, TRUE);
+                }
+                else if (id == IDC_EXIT_GAME) {
+                    PostQuitMessage(0);
+                }
+                else {
+                    menu->on_command(id);
+                }
+            }
+            else if (g_appState == STATE_GAME && g_gameApp) {
+                if (id == IDC_EXIT) {
+                    // Скрываем игру
+                    g_gameApp->hide();
+                    
+                    // Показываем меню
+                    menu->show();
+                    g_appState = STATE_MENU;
+                    InvalidateRect(hwnd, nullptr, TRUE);
+                }
+                else {
+                    g_gameApp->on_command(id);
                 }
             }
             return 0;
         }
+    case WM_TIMER:
+        if (g_gameApp && g_appState == STATE_GAME) g_gameApp->on_timer(wParam);
+        return 0;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
         
-        case WM_SETCURSOR: {
-            if (app && app->IsWaitingForClick()) {
-                POINT pt;
-                GetCursorPos(&pt);
-                ScreenToClient(hwnd, &pt);
-                RECT textRect = app->GetTextAreaRect();
-                if (PtInRect(&textRect, pt)) {
-                    SetCursor(LoadCursor(nullptr, IDC_HAND));
-                    return TRUE;
-                }
+        if (g_appState == STATE_MENU && menu) {
+            menu->on_paint(hdc);
+        } 
+        else if (g_appState == STATE_GAME && g_gameApp) {
+            g_gameApp->on_paint(hdc);
+        }
+        
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_LBUTTONDOWN: {
+        if (g_appState == STATE_GAME && g_gameApp && g_gameApp->IsWaitingForClick()) {
+            POINT pt = {LOWORD(lParam), HIWORD(lParam)};
+            RECT textRect = g_gameApp->GetTextAreaRect();
+            if (PtInRect(&textRect, pt)) {
+                g_gameApp->OnTextAreaClick();
             }
-            return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
-        
-        case WM_CTLCOLOREDIT:
-        case WM_CTLCOLORSTATIC: {
-            HDC hdc = (HDC)wParam;
-            SetBkColor(hdc, RGB(24, 26, 40));
-            SetTextColor(hdc, RGB(235, 235, 245));
-            return (LRESULT)darkBrush;
-        }
-        
-        case WM_DRAWITEM: {
-            LPDRAWITEMSTRUCT lpDIS = (LPDRAWITEMSTRUCT)lParam;
-            if (lpDIS->CtlType == ODT_BUTTON && 
-                lpDIS->CtlID >= IDC_CHOICE1 && 
-                lpDIS->CtlID <= IDC_CHOICE4) {
-                
-                HDC hdc = lpDIS->hDC;
-                RECT rc = lpDIS->rcItem;
-                
-                HBRUSH bgBrush = CreateSolidBrush(RGB(110, 78, 100));
-                FillRect(hdc, &rc, bgBrush);
-                DeleteObject(bgBrush);
-                
-                HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(230, 220, 235));
-                HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
-                HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-                Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
-                
-                wchar_t text[256];
-                GetWindowTextW(lpDIS->hwndItem, text, 256);
-                
-                SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, RGB(245, 238, 248));
-                
-                HFONT buttonFont = CreateFontW(-18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
-                HFONT oldFont = (HFONT)SelectObject(hdc, buttonFont);
-                
-                RECT textRect = rc;
-                textRect.left += 20;
-                textRect.right -= 10;
-                DrawTextW(hdc, text, -1, &textRect, DT_VCENTER | DT_SINGLELINE);
-                
-                if (lpDIS->itemState & ODS_SELECTED) {
-                    HBRUSH pressedBrush = CreateSolidBrush(RGB(80, 58, 70));
-                    FrameRect(hdc, &rc, pressedBrush);
-                    DeleteObject(pressedBrush);
-                }
-                
-                SelectObject(hdc, oldFont);
-                SelectObject(hdc, oldPen);
-                SelectObject(hdc, oldBrush);
-                DeleteObject(buttonFont);
-                DeleteObject(borderPen);
+        return 0;
+    }
+    case WM_SETCURSOR: {
+        if (g_appState == STATE_GAME && g_gameApp && g_gameApp->IsWaitingForClick()) {
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(hwnd, &pt);
+            RECT textRect = g_gameApp->GetTextAreaRect();
+            if (PtInRect(&textRect, pt)) {
+                SetCursor(LoadCursor(nullptr, IDC_HAND));
                 return TRUE;
             }
-            break;
         }
-        
-        case WM_USER + 1: {
-            std::function<void()>* action = reinterpret_cast<std::function<void()>*>(lParam);
-            if (action) {
-                (*action)();
-                delete action;
-            }
-            return 0;
-        }
-        
-        case WM_DESTROY:
-            if (app) {
-                delete app;
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                g_gameApp = nullptr;
-                g_gameWindow = nullptr;
-            }
-            if (g_mainHwnd) {
-                ShowLoadingScreen();
-                g_appState = STATE_MENU;
-                ShowWindow(g_mainHwnd, SW_SHOW);
-                HideLoadingScreen();
-            }
-            return 0;
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
-    
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetBkColor(hdc, RGB(24, 26, 40));
+        SetTextColor(hdc, RGB(235, 235, 245));
+        return (LRESULT)darkBrush;
+    }
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT lpDIS = (LPDRAWITEMSTRUCT)lParam;
+        if (lpDIS->CtlType == ODT_BUTTON && 
+            lpDIS->CtlID >= IDC_CHOICE1 && 
+            lpDIS->CtlID <= IDC_CHOICE4) {
+            
+            HDC hdc = lpDIS->hDC;
+            RECT rc = lpDIS->rcItem;
+            
+            HBRUSH bgBrush = CreateSolidBrush(RGB(110, 78, 100));
+            FillRect(hdc, &rc, bgBrush);
+            DeleteObject(bgBrush);
+            
+            HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(230, 220, 235));
+            HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
+            
+            wchar_t text[256];
+            GetWindowTextW(lpDIS->hwndItem, text, 256);
+            
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(245, 238, 248));
+            
+            HFONT buttonFont = CreateFontW(-18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Comic Sans MS");
+            HFONT oldFont = (HFONT)SelectObject(hdc, buttonFont);
+            
+            RECT textRect = rc;
+            textRect.left += 20;
+            textRect.right -= 10;
+            DrawTextW(hdc, text, -1, &textRect, DT_VCENTER | DT_SINGLELINE);
+            
+            if (lpDIS->itemState & ODS_SELECTED) {
+                HBRUSH pressedBrush = CreateSolidBrush(RGB(80, 58, 70));
+                FrameRect(hdc, &rc, pressedBrush);
+                DeleteObject(pressedBrush);
+            }
+            
+            SelectObject(hdc, oldFont);
+            SelectObject(hdc, oldPen);
+            SelectObject(hdc, oldBrush);
+            DeleteObject(buttonFont);
+            DeleteObject(borderPen);
+            return TRUE;
+        }
+        break;
+    }
+    case WM_DESTROY:
+        delete menu;
+        if (g_gameApp) delete g_gameApp;
+        PostQuitMessage(0);
+        return 0;
+    }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -1653,37 +1446,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     ULONG_PTR gdiplusToken = 0;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
     
-    WNDCLASSW loadingWc{}, menuWc{}, gameWc{};
-    loadingWc.lpfnWndProc = LoadingWndProc; loadingWc.hInstance = hInstance;
-    loadingWc.lpszClassName = L"LoadingWindowClass"; loadingWc.hCursor = LoadCursor(nullptr, IDC_WAIT);
-    loadingWc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    RegisterClassW(&loadingWc);
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = MainWndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = L"MainWindowClass";
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    RegisterClassW(&wc);
     
-    menuWc.lpfnWndProc = MenuWndProc; menuWc.hInstance = hInstance;
-    menuWc.lpszClassName = L"MenuWindowClass"; menuWc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    menuWc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    RegisterClassW(&menuWc);
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     
-    gameWc.lpfnWndProc = GameWndProc; gameWc.hInstance = hInstance;
-    gameWc.lpszClassName = L"GameWindowClass"; gameWc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    gameWc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    RegisterClassW(&gameWc);
-    
-    DEVMODE dmScreenSettings;
-    memset(&dmScreenSettings, 0, sizeof(dmScreenSettings));
-    dmScreenSettings.dmSize = sizeof(dmScreenSettings);
-    dmScreenSettings.dmPelsWidth = GetSystemMetrics(SM_CXSCREEN);
-    dmScreenSettings.dmPelsHeight = GetSystemMetrics(SM_CYSCREEN);
-    dmScreenSettings.dmBitsPerPel = 32;
-    dmScreenSettings.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-    ChangeDisplaySettings(&dmScreenSettings, CDS_FULLSCREEN);
-    
-    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST, L"MenuWindowClass", L"Майами: уроки свободы",
-        WS_POPUP | WS_VISIBLE, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOPMOST, L"MainWindowClass", L"Майами: уроки свободы",
+        WS_POPUP | WS_VISIBLE,
+        0, 0, screenWidth, screenHeight,
         nullptr, nullptr, hInstance, nullptr);
-    if (!hwnd) { GdiplusShutdown(gdiplusToken); return 1; }
     
-    g_mainHwnd = hwnd;
+    if (!hwnd) {
+        GdiplusShutdown(gdiplusToken);
+        return 1;
+    }
+    
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     

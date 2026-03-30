@@ -372,7 +372,7 @@ public:
             return;
         }
         
-        play_scene(L"scene_32");
+        play_scene(L"scene_1");
     }
     
     void reset_game() {
